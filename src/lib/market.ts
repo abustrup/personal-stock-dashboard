@@ -100,21 +100,29 @@ export function deriveFundamentalAxes(input: FundamentalInputs): {
   const roeScore = num(input.returnOnEquity) ? clamp01(input.returnOnEquity * 1.8) : 0.5;
   const quality = Math.round(100 * (0.55 * marginScore + 0.45 * roeScore));
 
-  // Valuation risk: forward P/E (preferred) blended with price/sales. Higher = pricier.
-  const pe = num(input.forwardPE) ? input.forwardPE : input.trailingPE;
-  const peRisk = num(pe) ? clamp01((pe - 8) / 52) : 0.5; // 8x → 0, 60x → 1
-  const psRisk = num(input.priceToSales) ? clamp01((input.priceToSales - 1) / 19) : peRisk; // 1x → 0, 20x → 1
-  const valuationRisk = Math.round(100 * (0.6 * peRisk + 0.4 * psRisk));
+  // Valuation risk: only positive P/E is meaningful. A negative/zero P/E means
+  // no (or negative) earnings — valuation fragility, not "cheap" — so it must not
+  // floor to low risk. Prefer a valid forward P/E, else a valid trailing P/E.
+  const psRisk = num(input.priceToSales) ? clamp01((input.priceToSales - 1) / 19) : undefined; // 1x → 0, 20x → 1
+  const fwd = num(input.forwardPE) && input.forwardPE > 0 ? input.forwardPE : undefined;
+  const trl = num(input.trailingPE) && input.trailingPE > 0 ? input.trailingPE : undefined;
+  const pe = fwd ?? trl;
+  const lossMaking = (num(input.forwardPE) && input.forwardPE <= 0) || (num(input.trailingPE) && input.trailingPE <= 0);
+  let peRisk: number;
+  if (pe !== undefined) peRisk = clamp01((pe - 8) / 52); // 8x → 0, 60x → 1
+  else if (lossMaking) peRisk = 0.85; // negative earnings → elevated valuation risk
+  else peRisk = psRisk ?? 0.5; // no earnings data → let price/sales carry it
+  const valuationRisk = Math.round(100 * (0.6 * peRisk + 0.4 * (psRisk ?? peRisk)));
 
-  // Balance-sheet risk: the sign of net cash is decisive (a net-cash company is
-  // low-risk regardless of size); net debt relative to market cap scales the rest.
+  // Balance-sheet risk: net cash vs market cap is the clean signal, anchored at 35
+  // for break-even and continuous across the net-cash/net-debt boundary.
   let bsRisk = 45;
   if (num(input.totalCash) && num(input.totalDebt) && num(input.marketCap) && input.marketCap > 0) {
     const netCashRatio = (input.totalCash - input.totalDebt) / input.marketCap;
     bsRisk =
       netCashRatio >= 0
-        ? Math.max(15, 35 - netCashRatio * 100) // net cash → 15-35
-        : Math.min(95, 50 - netCashRatio * 120); // net debt → 50-95
+        ? Math.max(20, 35 - Math.min(netCashRatio, 0.8) * 18.75) // net cash: 0 → 35, 0.8 → 20
+        : Math.min(95, 35 - netCashRatio * 120); // net debt: 0 → 35, -0.5 → 95
   } else if (num(input.debtToEquity)) {
     bsRisk = 20 + input.debtToEquity * 0.28; // treat as percent: 100% → 48
   }

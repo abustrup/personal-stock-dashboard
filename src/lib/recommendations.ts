@@ -34,7 +34,7 @@ export function recommendCompany(
     company,
     holding,
     action,
-    conviction: convictionFor(score, measured),
+    conviction: convictionFor(score, measured, Boolean(company.market?.fundamentals)),
     measured,
     score,
     reasoning: buildReasoning(company, score, compliance.status, momentumMeasured, Boolean(company.market?.fundamentals)),
@@ -95,10 +95,15 @@ function actionForScore(score: number, owned: boolean): RecommendationAction {
 }
 
 // Conviction reflects how much *real* evidence backs the score. "high" requires
-// measured data; editorial-only names are capped at "medium" and only when strong.
-function convictionFor(score: number, measured: boolean): "high" | "medium" | "low" {
+// measured fundamentals (the strongest evidence); a momentum-only snapshot caps
+// at "medium"; editorial-only names cap at "medium" and only when strong.
+function convictionFor(
+  score: number,
+  measured: boolean,
+  fundamentalsMeasured: boolean,
+): "high" | "medium" | "low" {
   if (measured) {
-    if (score >= 70) return "high";
+    if (fundamentalsMeasured && score >= 70) return "high";
     if (score >= 50) return "medium";
     return "low";
   }
@@ -114,12 +119,14 @@ function buildReasoning(
 ): string[] {
   const momentumLabel = momentumMeasured ? "measured from price" : "editorial estimate";
   const fundLabel = fundamentalsMeasured ? "measured from fundamentals" : "editorial estimate";
+  const measuredParts = [momentumMeasured && "price action", fundamentalsMeasured && "fundamentals"].filter(Boolean);
+  const head = measuredParts.length
+    ? `${measuredParts.join(" and ")} ${measuredParts.length > 1 ? "are" : "is"} measured; news, expert view, AI exposure and geopolitical risk are editorial.`
+    : "every axis here is an editorial estimate.";
   const reasons = [
-    `Score ${score}/100, medium-high-risk weighting. AI exposure and geopolitical risk are editorial; the rest is ${
-      momentumMeasured && fundamentalsMeasured ? "measured market data" : "partly editorial"
-    }.`,
+    `Score ${score}/100, medium-high-risk weighting. ${head.charAt(0).toUpperCase()}${head.slice(1)}`,
     `Momentum ${company.momentum}/100 (${momentumLabel}).`,
-    `Growth ${company.growth}/100, quality ${company.quality}/100, valuation risk ${company.valuationRisk}/100 (${fundLabel}).`,
+    `Growth ${company.growth}/100, quality ${company.quality}/100, valuation risk ${company.valuationRisk}/100, balance-sheet risk ${company.balanceSheetRisk}/100 (${fundLabel}).`,
     `AI exposure (editorial) ${company.aiExposure}/100.`,
     `News signal is ${company.newsSignal.direction}: ${company.newsSignal.summary}`,
     `Expert signal is ${company.expertSignal.direction}: ${company.expertSignal.summary}`,
