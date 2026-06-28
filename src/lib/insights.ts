@@ -25,6 +25,41 @@ export type PortfolioInsights = {
   };
   /** The single riskiest holding, by the model's risk axes + compliance. */
   topRisk?: { recommendation: Recommendation; riskScore: number };
+  /**
+   * Per-holding standing *within your own book* — size rank, risk rank and the
+   * dominant risk axis. A broker shows the inputs (per-line weight) but never
+   * ranks one position against another or synthesises which is riskiest.
+   */
+  holdingContexts: Map<string, HoldingContext>;
+};
+
+/**
+ * The risk axes a holding's risk standing can be attributed to. Kept as a
+ * single shared source of truth so the producer (`dominantRiskFactor`) and any
+ * consumer (e.g. the detail view's provenance label) cannot drift apart.
+ */
+export const RISK_FACTORS = {
+  compliance: "EIFO compliance",
+  valuation: "valuation risk",
+  balanceSheet: "balance-sheet risk",
+  geopolitical: "geopolitical risk",
+} as const;
+
+export type RiskFactor = (typeof RISK_FACTORS)[keyof typeof RISK_FACTORS];
+
+/** Where a single holding sits relative to the rest of the portfolio. */
+export type HoldingContext = {
+  symbol: string;
+  /** Number of owned holdings in the book. */
+  count: number;
+  /** 1 = largest position by portfolio weight. */
+  sizeRank: number;
+  /** This holding's share of the portfolio, as a percent number. */
+  weightPct: number;
+  /** 1 = riskiest by the model's risk axes + compliance. */
+  riskRank: number;
+  /** The single largest risk axis driving this holding's risk standing. */
+  riskFactor: RiskFactor;
 };
 
 // Commonly-cited single-name and top-holdings concentration thresholds. A book
@@ -63,7 +98,49 @@ export function buildInsights(portfolio: Recommendation[], opportunities: Recomm
     tilt: dominantTilt(portfolio),
     concentration: positionConcentration(portfolio),
     topRisk,
+    holdingContexts: buildHoldingContexts(portfolio),
   };
+}
+
+// The dominant risk axis behind a holding's risk standing. Compliance dominates
+// when present (a block/restriction outweighs any axis); otherwise it is the
+// single largest of the valuation, balance-sheet and geopolitical axes.
+function dominantRiskFactor(rec: Recommendation): RiskFactor {
+  if (rec.compliance.status === "blocked" || rec.compliance.status === "restricted") {
+    return RISK_FACTORS.compliance;
+  }
+  const axes: Array<[number, RiskFactor]> = [
+    [rec.company.valuationRisk, RISK_FACTORS.valuation],
+    [rec.company.balanceSheetRisk, RISK_FACTORS.balanceSheet],
+    [rec.company.geopoliticalRisk, RISK_FACTORS.geopolitical],
+  ];
+  return axes.sort((a, b) => b[0] - a[0])[0][1];
+}
+
+/**
+ * Rank every owned holding against the rest of the book by size and by risk.
+ * Non-owned recommendations (watch/investigate ideas) are excluded — this is
+ * about the portfolio you actually hold. Keyed by company symbol.
+ */
+export function buildHoldingContexts(portfolio: Recommendation[]): Map<string, HoldingContext> {
+  const owned = portfolio.filter((rec) => rec.holding);
+  const bySize = [...owned].sort((a, b) => (b.holding?.portfolioWeight ?? 0) - (a.holding?.portfolioWeight ?? 0));
+  const byRisk = [...owned].sort((a, b) => riskScore(b) - riskScore(a));
+  const sizeRank = new Map(bySize.map((rec, index) => [rec.company.symbol, index + 1]));
+  const riskRank = new Map(byRisk.map((rec, index) => [rec.company.symbol, index + 1]));
+
+  const contexts = new Map<string, HoldingContext>();
+  for (const rec of owned) {
+    contexts.set(rec.company.symbol, {
+      symbol: rec.company.symbol,
+      count: owned.length,
+      sizeRank: sizeRank.get(rec.company.symbol) ?? owned.length,
+      weightPct: rec.holding?.portfolioWeight ?? 0,
+      riskRank: riskRank.get(rec.company.symbol) ?? owned.length,
+      riskFactor: dominantRiskFactor(rec),
+    });
+  }
+  return contexts;
 }
 
 function positionConcentration(portfolio: Recommendation[]): PortfolioInsights["concentration"] {
