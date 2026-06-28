@@ -14,10 +14,14 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: /personal stock dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /what saxo doesn.t tell you/i })).toBeInTheDocument();
     expect(screen.getByText(/EIFO compliance is built in/i)).toBeInTheDocument();
-    expect(screen.getByText(/NVIDIA Corp\./i)).toBeInTheDocument();
+    // The top holding now appears both in the holdings list and in the
+    // concentration synthesis, so there may be more than one occurrence.
+    expect(screen.getAllByText(/NVIDIA Corp\./i).length).toBeGreaterThanOrEqual(1);
     // The value-add insights are present.
     expect(screen.getByText(/Needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Top opportunity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Concentration/i)).toBeInTheDocument();
+    expect(screen.getByText(/in NVIDIA Corp\./i)).toBeInTheDocument();
   });
 
   it("falls back to an editorial-only label when no snapshot loads", async () => {
