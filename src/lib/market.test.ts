@@ -77,6 +77,24 @@ describe("market metrics", () => {
     expect(weak.balanceSheetRisk).toBeGreaterThan(70); // net debt + weak liquidity
   });
 
+  it("does not score loss-making (negative P/E) companies as low valuation risk", () => {
+    const lossMaker = deriveFundamentalAxes({
+      forwardPE: -20,
+      priceToSales: 18,
+      profitMargins: -0.1,
+      revenueGrowth: 0.05,
+    });
+    // Negative earnings → elevated, not floored-to-zero, valuation risk.
+    expect(lossMaker.valuationRisk).toBeGreaterThanOrEqual(50);
+  });
+
+  it("ignores a negative forward P/E when a valid trailing P/E exists", () => {
+    const axes = deriveFundamentalAxes({ forwardPE: -20, trailingPE: 30, priceToSales: 5 });
+    // Uses trailing 30x, not the bogus negative forward — moderate, not extreme.
+    expect(axes.valuationRisk).toBeGreaterThan(25);
+    expect(axes.valuationRisk).toBeLessThan(55);
+  });
+
   it("falls back to neutral axes when fundamentals are missing", () => {
     const axes = deriveFundamentalAxes({});
     for (const v of Object.values(axes)) {

@@ -118,31 +118,45 @@ async function fetchYahooMarket(symbol) {
   }
 }
 
-// Yahoo's fundamentals endpoint needs a cookie + crumb obtained once per run.
+// Yahoo's fundamentals endpoint needs a cookie + crumb. Retry the handshake a
+// few times and log why it failed, so a CI run shows when fundamentals are off.
 async function getYahooSession() {
-  try {
-    const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA } });
-    const setCookies = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
-    const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
-    const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
-      headers: { "User-Agent": UA, Cookie: cookie },
-    });
-    const crumb = (await cr.text()).trim();
-    if (!crumb || crumb.includes("<") || crumb.length > 40) return undefined;
-    return { cookie, crumb };
-  } catch {
-    return undefined;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA } });
+      const setCookies = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
+      const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
+      const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+        headers: { "User-Agent": UA, Cookie: cookie },
+      });
+      const crumb = (await cr.text()).trim();
+      if (crumb && !crumb.includes("<") && crumb.length <= 40) return { cookie, crumb };
+      console.log(`Yahoo crumb attempt ${attempt} rejected (HTTP ${cr.status}).`);
+    } catch (error) {
+      console.log(`Yahoo crumb attempt ${attempt} failed: ${error instanceof Error ? error.message : error}`);
+    }
+    await sleep(400 * attempt);
   }
+  return undefined;
 }
 
 async function fetchYahooFundamentals(symbol, session) {
   if (!session) return undefined;
   const url = new URL(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`);
   url.searchParams.set("modules", "financialData,defaultKeyStatistics,summaryDetail");
-  url.searchParams.set("crumb", session.crumb);
 
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA, Cookie: session.cookie } });
+    // One re-auth if the crumb expired mid-run.
+    let r;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      url.searchParams.set("crumb", session.crumb);
+      r = await fetch(url, { headers: { "User-Agent": UA, Cookie: session.cookie } });
+      if (r.status !== 401 || attempt === 1) break;
+      const fresh = await getYahooSession();
+      if (!fresh) return undefined;
+      session.cookie = fresh.cookie;
+      session.crumb = fresh.crumb;
+    }
     if (!r.ok) return undefined;
     const data = await r.json();
     const res = data?.quoteSummary?.result?.[0];
@@ -151,6 +165,12 @@ async function fetchYahooFundamentals(symbol, session) {
     const ks = res.defaultKeyStatistics ?? {};
     const sd = res.summaryDetail ?? {};
     const raw = (x) => (x && typeof x.raw === "number" ? x.raw : undefined);
+
+    // Balance-sheet figures are in the company's financialCurrency; market cap is
+    // in the quote currency. For ADRs/foreign listings these differ, so only feed
+    // the net-cash path when they match (otherwise the model uses debtToEquity,
+    // which is unit-agnostic).
+    const currenciesMatch = !fd.financialCurrency || !sd.currency || fd.financialCurrency === sd.currency;
 
     const inputs = {
       trailingPE: raw(sd.trailingPE),
@@ -162,9 +182,9 @@ async function fetchYahooFundamentals(symbol, session) {
       returnOnEquity: raw(fd.returnOnEquity),
       debtToEquity: raw(fd.debtToEquity),
       currentRatio: raw(fd.currentRatio),
-      totalCash: raw(fd.totalCash),
-      totalDebt: raw(fd.totalDebt),
-      marketCap: raw(sd.marketCap),
+      totalCash: currenciesMatch ? raw(fd.totalCash) : undefined,
+      totalDebt: currenciesMatch ? raw(fd.totalDebt) : undefined,
+      marketCap: currenciesMatch ? raw(sd.marketCap) : undefined,
     };
     // Need at least one real signal to be worth attaching.
     const hasSignal = [inputs.revenueGrowth, inputs.profitMargins, inputs.trailingPE, inputs.forwardPE].some(

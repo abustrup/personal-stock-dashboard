@@ -324,8 +324,8 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
           <PositionStat label="Fwd / trail P/E" value={`${formatRatio(market.fundamentals.forwardPE)} / ${formatRatio(market.fundamentals.trailingPE)}`} />
           <PositionStat label="Price / sales" value={formatRatio(market.fundamentals.priceToSales)} />
           <PositionStat label="Revenue growth" value={formatSignedPct(toPct(market.fundamentals.revenueGrowth))} tone={toneOf(market.fundamentals.revenueGrowth ?? 0)} />
-          <PositionStat label="Profit margin" value={formatSignedPct(toPct(market.fundamentals.profitMargins))} />
-          <PositionStat label="Return on equity" value={formatSignedPct(toPct(market.fundamentals.returnOnEquity))} />
+          <PositionStat label="Profit margin" value={formatSignedPct(toPct(market.fundamentals.profitMargins))} tone={toneOf(market.fundamentals.profitMargins ?? 0)} />
+          <PositionStat label="Return on equity" value={formatSignedPct(toPct(market.fundamentals.returnOnEquity))} tone={toneOf(market.fundamentals.returnOnEquity ?? 0)} />
           <PositionStat label="Quality / val. risk" value={`${company.quality} / ${company.valuationRisk}`} />
         </div>
       )}
@@ -391,12 +391,15 @@ function formatSigned(value: number): string {
 
 function formatSignedPct(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return "—";
-  return `${value < 0 ? "−" : "+"}${Math.abs(value).toFixed(2)}%`;
+  // Decide the sign from the rounded magnitude so -0.001 never shows "−0.00%".
+  const rounded = Number(value.toFixed(2));
+  const sign = rounded < 0 ? "−" : rounded > 0 ? "+" : "";
+  return `${sign}${Math.abs(rounded).toFixed(2)}%`;
 }
 
 function toneOf(value: number): "up" | "down" | undefined {
-  if (value > 0) return "up";
-  if (value < 0) return "down";
+  if (value > 0.005) return "up";
+  if (value < -0.005) return "down";
   return undefined;
 }
 
@@ -410,7 +413,8 @@ function formatPrice(value: number): string {
 }
 
 function formatRatio(value: number | undefined): string {
-  if (value === undefined || !Number.isFinite(value)) return "—";
+  // A P/E or P/S of zero or below is not a meaningful multiple (e.g. no earnings).
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return "—";
   return `${value.toFixed(1)}×`;
 }
 
