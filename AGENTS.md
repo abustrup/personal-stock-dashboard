@@ -5,10 +5,21 @@ Build this as a local decision-support dashboard, not financial advice.
 ## Run
 
 - Install: `npm install`
-- Develop: `npm run dev`
+- Develop: `npm run dev` (auto-picks a free port — safe for several agents at once)
+- Launch (fixed port, opens browser): `npm start`
 - Test: `npm test`
 - Build: `npm run build`
 - Optional signal refresh: `npm run refresh`
+
+## Multiple agents
+
+- One agent per git worktree/branch; never edit the same working copy concurrently. See `CONTRIBUTING.md`.
+- Use `npm run dev` for parallel previews (`npm start`/`npm run preview` use fixed ports — one at a time).
+- Open small PRs to `main`; CI must stay green. `main` auto-deploys to GitHub Pages.
+
+## Privacy (public repo)
+
+- This repository is public. Demo data only — never commit a real broker export or real positions (`.gitignore` blocks `*Positioner*.csv`, `*private*.csv`, `/data/`).
 
 ## Product Rules
 
