@@ -3,6 +3,10 @@
 Local decision-support dashboard for a medium-high-risk AI and tech portfolio.
 Decision support, not licensed financial advice.
 
+**Live demo:** https://abustrup.github.io/personal-stock-dashboard/ — published
+from `main` with fictional demo data and a daily market refresh. Run it locally
+(below) to use your own portfolio; real positions never leave your machine.
+
 ## What It Does
 
 - Imports your Danish broker CSV and shows real position P&L (cost basis,
