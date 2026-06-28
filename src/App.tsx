@@ -29,7 +29,9 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/data/live-signals.json")
+    // BASE_URL is "/" in dev and "/<repo>/" on GitHub Pages, so the snapshot
+    // resolves correctly in both.
+    fetch(`${import.meta.env.BASE_URL}data/live-signals.json`)
       .then((response) => (response.ok ? response.json() : undefined))
       .then(
         (
