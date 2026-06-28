@@ -138,6 +138,8 @@ export type Recommendation = {
   /** True when backed by measured market data or live signals (not editorial-only). */
   measured: boolean;
   score: number;
+  /** One-line "why" — the dominant drivers behind the action. */
+  headline: string;
   reasoning: string[];
   downside: string;
   compliance: ComplianceResult;

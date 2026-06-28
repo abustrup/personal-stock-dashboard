@@ -37,6 +37,7 @@ export function recommendCompany(
     conviction: convictionFor(score, measured, Boolean(company.market?.fundamentals)),
     measured,
     score,
+    headline: buildHeadline(company, compliance.status),
     reasoning: buildReasoning(company, score, compliance.status, momentumMeasured, Boolean(company.market?.fundamentals)),
     downside: downsideFor(company),
     compliance,
@@ -108,6 +109,29 @@ function convictionFor(
     return "low";
   }
   return score >= 62 ? "medium" : "low";
+}
+
+// A short, decision-useful "why" — the kind of synthesis a broker dashboard
+// does not give you. Compliance overrides; otherwise the two strongest drivers.
+function buildHeadline(company: Company, complianceStatus: ComplianceStatus): string {
+  if (complianceStatus === "blocked") return "Blocked by EIFO policy — do not trade.";
+  if (complianceStatus === "restricted") return "Tradeable, but EIFO 6-month hold and no derivatives apply.";
+
+  const drivers: string[] = [];
+  if (complianceStatus === "possible_overlap") drivers.push("possible EIFO overlap");
+  if (company.momentum >= 70) drivers.push("strong momentum");
+  else if (company.momentum <= 35) drivers.push("weak momentum");
+  if (company.growth >= 75) drivers.push("high growth");
+  if (company.quality >= 80) drivers.push("durable quality");
+  else if (company.quality <= 30) drivers.push("thin profitability");
+  if (company.valuationRisk >= 75) drivers.push("stretched valuation");
+  else if (company.valuationRisk <= 30) drivers.push("undemanding valuation");
+  if (company.balanceSheetRisk >= 70) drivers.push("leveraged balance sheet");
+  if (company.geopoliticalRisk >= 70) drivers.push("elevated geopolitical risk");
+
+  if (drivers.length === 0) return "Balanced risk and reward; no single signal dominates.";
+  const text = drivers.slice(0, 2).join("; ");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
 function buildReasoning(

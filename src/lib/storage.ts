@@ -1,0 +1,64 @@
+import type { Holding } from "./types";
+
+const KEY = "psd.portfolio.v1";
+
+export type StoredPortfolio = {
+  version: 1;
+  importedAt: string;
+  label: string;
+  holdings: Holding[];
+};
+
+// Pure (de)serialization so it can be unit-tested without a browser.
+export function serializePortfolio(holdings: Holding[], label: string, importedAt: string): string {
+  const payload: StoredPortfolio = { version: 1, importedAt, label, holdings };
+  return JSON.stringify(payload);
+}
+
+export function parseStoredPortfolio(raw: string | null | undefined): StoredPortfolio | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<StoredPortfolio>;
+    if (parsed?.version !== 1 || !Array.isArray(parsed.holdings) || parsed.holdings.length === 0) return undefined;
+    // Minimal shape check so a corrupt/old payload falls back to the demo.
+    if (!parsed.holdings.every((h) => typeof h?.symbol === "string" && typeof h?.marketValueDkk === "number")) {
+      return undefined;
+    }
+    return {
+      version: 1,
+      importedAt: typeof parsed.importedAt === "string" ? parsed.importedAt : new Date(0).toISOString(),
+      label: typeof parsed.label === "string" ? parsed.label : "Imported portfolio",
+      holdings: parsed.holdings as Holding[],
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function storage(): Storage | undefined {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage : undefined;
+  } catch {
+    return undefined; // localStorage can throw in private mode
+  }
+}
+
+export function loadPortfolio(): StoredPortfolio | undefined {
+  return parseStoredPortfolio(storage()?.getItem(KEY) ?? undefined);
+}
+
+export function savePortfolio(holdings: Holding[], label: string, importedAt: string): void {
+  try {
+    storage()?.setItem(KEY, serializePortfolio(holdings, label, importedAt));
+  } catch {
+    /* quota / private mode — non-fatal, the session still works in memory */
+  }
+}
+
+export function clearPortfolio(): void {
+  try {
+    storage()?.removeItem(KEY);
+  } catch {
+    /* non-fatal */
+  }
+}
