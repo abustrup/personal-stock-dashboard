@@ -24,14 +24,20 @@ export function recommendCompany(
   const holding = holdingContext && "rawSymbol" in holdingContext ? holdingContext : undefined;
   const score = compliance.status === "blocked" ? 0 : Math.round(calculateScore(company, compliance.status));
   const action = compliance.status === "blocked" ? "avoid" : actionForScore(score, owned);
+  const momentumMeasured = Boolean(company.market);
+  const measured =
+    momentumMeasured ||
+    company.newsSignal.freshness === "live" ||
+    company.expertSignal.freshness === "live";
 
   return {
     company,
     holding,
     action,
-    conviction: convictionFor(company, score),
+    conviction: convictionFor(score, measured),
+    measured,
     score,
-    reasoning: buildReasoning(company, score, compliance.status),
+    reasoning: buildReasoning(company, score, compliance.status, momentumMeasured),
     downside: downsideFor(company),
     compliance,
     newsSignal: company.newsSignal,
@@ -88,17 +94,27 @@ function actionForScore(score: number, owned: boolean): RecommendationAction {
   return "avoid";
 }
 
-function convictionFor(company: Company, score: number): "high" | "medium" | "low" {
-  const liveInputs = [company.newsSignal.freshness, company.expertSignal.freshness].filter((x) => x === "live").length;
-  if (liveInputs >= 1 && score >= 70) return "high";
-  if (score >= 52) return "medium";
-  return "low";
+// Conviction reflects how much *real* evidence backs the score. "high" requires
+// measured data; editorial-only names are capped at "medium" and only when strong.
+function convictionFor(score: number, measured: boolean): "high" | "medium" | "low" {
+  if (measured) {
+    if (score >= 70) return "high";
+    if (score >= 50) return "medium";
+    return "low";
+  }
+  return score >= 62 ? "medium" : "low";
 }
 
-function buildReasoning(company: Company, score: number, complianceStatus: string): string[] {
+function buildReasoning(
+  company: Company,
+  score: number,
+  complianceStatus: string,
+  momentumMeasured: boolean,
+): string[] {
+  const momentumLabel = momentumMeasured ? "measured from price" : "editorial estimate";
   const reasons = [
-    `Score ${score}/100 with medium-high-risk weighting.`,
-    `${company.aiExposure}/100 AI exposure and ${company.momentum}/100 momentum.`,
+    `Score ${score}/100 — a medium-high-risk blend of measured price action and editorial estimates.`,
+    `AI exposure (editorial estimate) ${company.aiExposure}/100; momentum ${company.momentum}/100 (${momentumLabel}).`,
     `News signal is ${company.newsSignal.direction}: ${company.newsSignal.summary}`,
     `Expert signal is ${company.expertSignal.direction}: ${company.expertSignal.summary}`,
   ];

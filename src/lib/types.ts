@@ -112,6 +112,8 @@ export type Recommendation = {
   holding?: Holding;
   action: RecommendationAction;
   conviction: "high" | "medium" | "low";
+  /** True when backed by measured market data or live signals (not editorial-only). */
+  measured: boolean;
   score: number;
   reasoning: string[];
   downside: string;

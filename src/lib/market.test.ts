@@ -16,6 +16,7 @@ describe("market metrics", () => {
     expect(rangePosition(150, 200, 100)).toBeCloseTo(0.5);
     expect(rangePosition(200, 200, 100)).toBe(1);
     expect(rangePosition(100, 100, 100)).toBeUndefined(); // degenerate range
+    expect(rangePosition(100, 200, 0)).toBeUndefined(); // bogus zero low
   });
 
   it("scores a strong uptrend near the top of its range high", () => {

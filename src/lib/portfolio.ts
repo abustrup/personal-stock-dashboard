@@ -44,7 +44,11 @@ export function parsePortfolioCsv(input: string): PortfolioParseResult {
   return {
     holdings,
     skippedRows: rows.length - holdings.length,
-    totalMarketValueDkk: holdings.reduce((sum, holding) => sum + holding.marketValueDkk, 0),
+    // A single unparseable cell must not poison the portfolio total.
+    totalMarketValueDkk: holdings.reduce(
+      (sum, holding) => sum + (Number.isFinite(holding.marketValueDkk) ? holding.marketValueDkk : 0),
+      0,
+    ),
   };
 }
 
@@ -77,7 +81,8 @@ function toHolding(row: CsvRow): Holding {
     dayReturnPct: optionalNumber(value(row, "% 1D afk.")),
     dayGainDkk: optionalNumber(value(row, "1-dags gevinst/tab (DKK)")),
     // Source stores weight as a fraction (0.1179); surface it as a percent (11.79).
-    portfolioWeight: parseDanishNumber(value(row, "% af portefølje")) * 100,
+    // Missing/blank column → 0 rather than NaN.
+    portfolioWeight: (optionalNumber(value(row, "% af portefølje")) ?? 0) * 100,
     lastUpdated: value(row, "Senest opdateret") || undefined,
   };
 }
@@ -102,10 +107,15 @@ export function parseDanishNumber(raw: string): number {
   const cleaned = raw
     .replace(/\u00a0/g, "")
     .replace(/%/g, "")
-    .replace(/\s/g, "")
-    .replace(",", ".");
+    .replace(/\s/g, "");
   if (!cleaned) return Number.NaN;
-  return Number(cleaned);
+  // Danish locale uses comma as the decimal separator and dot as the thousands
+  // separator. When a comma is present, strip grouping dots and treat the comma
+  // as the decimal point ("1.234.567,89" \u2192 1234567.89). With no comma the dot is
+  // already the decimal point ("24150.00" \u2192 24150), which matches this broker's
+  // ungrouped export.
+  const normalized = cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned;
+  return Number(normalized);
 }
 
 function parseCsv(input: string): CsvRow[] {

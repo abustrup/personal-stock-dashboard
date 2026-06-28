@@ -32,7 +32,9 @@ export function rangePosition(
   high: number | undefined,
   low: number | undefined,
 ): number | undefined {
-  if (high === undefined || low === undefined || high <= low) return undefined;
+  // A real 52-week low is strictly positive; reject 0/missing bounds (some
+  // providers return low=0) so a bogus range cannot inflate momentum.
+  if (high === undefined || low === undefined || low <= 0 || high <= low) return undefined;
   return clamp01((price - low) / (high - low));
 }
 

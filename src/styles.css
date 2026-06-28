@@ -214,10 +214,16 @@ h3 {
   cursor: pointer;
 }
 
-.stock-row:hover,
-.stock-row:focus-visible {
+.stock-row:hover {
   border-color: #54816b;
-  outline: none;
+}
+
+/* Keyboard focus must be visible on its own, not only via the hover border. */
+.stock-row:focus-visible,
+.tab:focus-visible,
+.upload:focus-visible {
+  outline: 2px solid #1f2f28;
+  outline-offset: 2px;
 }
 
 .stock-row div:first-child {
@@ -355,6 +361,16 @@ h3 {
 
 .empty {
   color: #5f6157;
+}
+
+.estimate-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid #d9c5a5;
+  background: #fbf7ee;
+  color: #5f6157;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
 .tone-up {

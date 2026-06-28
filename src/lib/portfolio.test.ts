@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePortfolioCsv, providerSymbol } from "./portfolio";
+import { parseDanishNumber, parsePortfolioCsv, providerSymbol } from "./portfolio";
 
 // Synthetic fixture (not real positions). Exercises the BOM, the skipped broker
 // summary row, comma decimals, weight-as-fraction and the P&L columns.
@@ -42,5 +42,36 @@ describe("parsePortfolioCsv", () => {
   it("maps broker symbols into provider lookup symbols", () => {
     expect(providerSymbol("GOOGL:xnas")).toBe("GOOGL");
     expect(providerSymbol("VWS:xcse")).toBe("VWS.CO");
+  });
+
+  it("does not let one unparseable cell poison the portfolio total", () => {
+    const bad =
+      '﻿"Instrument","Antal","Aktuel kurs","Markedsværdi (DKK)","Symbol","ISIN"\n' +
+      '"Good A/S","1","10","100.00","GOOD:xnas","US0000000001"\n' +
+      '"Bad A/S","1","10","n/a","BAD:xnas","US0000000002"';
+    const result = parsePortfolioCsv(bad);
+
+    expect(result.holdings).toHaveLength(2);
+    expect(Number.isFinite(result.totalMarketValueDkk)).toBe(true);
+    expect(result.totalMarketValueDkk).toBeCloseTo(100.0);
+    // Missing weight column → 0, never NaN.
+    expect(result.holdings[0].portfolioWeight).toBe(0);
+  });
+});
+
+describe("parseDanishNumber", () => {
+  it("handles the broker's ungrouped dot-decimal and comma-decimal forms", () => {
+    expect(parseDanishNumber("24150.00")).toBeCloseTo(24150);
+    expect(parseDanishNumber("16,67%")).toBeCloseTo(16.67);
+    expect(parseDanishNumber("50,00")).toBeCloseTo(50);
+  });
+
+  it("handles grouped Danish numbers without producing NaN or 1000x errors", () => {
+    expect(parseDanishNumber("1.234.567,89")).toBeCloseTo(1234567.89);
+    expect(parseDanishNumber("1.250,00")).toBeCloseTo(1250);
+  });
+
+  it("returns NaN for empty input", () => {
+    expect(Number.isNaN(parseDanishNumber(""))).toBe(true);
   });
 });

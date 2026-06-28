@@ -94,7 +94,7 @@ export default function App() {
       </header>
 
       <section className="notice" aria-label="compliance notice">
-        <ShieldAlert size={20} />
+        <ShieldAlert size={20} aria-hidden="true" />
         <div>
           <strong>EIFO status is not clean by default.</strong>
           <span>
@@ -126,6 +126,7 @@ export default function App() {
               key={tab.id}
               className={view === tab.id ? "tab active" : "tab"}
               type="button"
+              aria-current={view === tab.id ? "page" : undefined}
               onClick={() => setView(tab.id)}
               title={tab.label}
             >
@@ -255,9 +256,16 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
         <div className="detail-action">
           <Action action={recommendation.action} />
           <strong>{recommendation.score}/100</strong>
-          <span>{recommendation.conviction} conviction</span>
+          <span>
+            {recommendation.conviction} conviction · {recommendation.measured ? "data-backed" : "editorial only"}
+          </span>
         </div>
       </div>
+
+      <p className="estimate-note">
+        The score blends measured price action with editorial estimates from the curated universe.
+        {!market && " No live price for this name — momentum here is an editorial estimate, not measured."}
+      </p>
 
       {holding && (
         <div className="position" aria-label="your position">
@@ -309,7 +317,7 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
       </div>
 
       <div className={`compliance ${compliance.status}`}>
-        <AlertTriangle size={18} />
+        <AlertTriangle size={18} aria-hidden="true" />
         <div>
           <strong>{compliance.status.replace("_", " ")}</strong>
           {compliance.flags.map((flag) => (
@@ -331,8 +339,8 @@ function InfoBlock({ title, lines }: { title: string; lines: string[] }) {
   return (
     <article className="info-block">
       <h3>{title}</h3>
-      {lines.map((line) => (
-        <p key={line}>{line}</p>
+      {lines.map((line, index) => (
+        <p key={index}>{line}</p>
       ))}
     </article>
   );

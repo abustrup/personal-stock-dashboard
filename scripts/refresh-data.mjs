@@ -5,7 +5,7 @@
 // analyst trends (Finnhub) are optional and only run when keys are present.
 //
 // Writes public/data/live-signals.json, which the browser reads at load time.
-// Requires Node 22.6+ (the TS import below relies on native type stripping).
+// Requires Node 22.18+ (the .ts imports below rely on unflagged type stripping).
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,7 +13,13 @@ import { deriveMarketMetrics } from "../src/lib/market.ts";
 import { universe } from "../src/data/universe.ts";
 
 const cliSymbols = process.argv.slice(2);
-const symbols = cliSymbols.length > 0 ? cliSymbols : universe.map((company) => company.symbol);
+// Skip non-listed names (e.g. assetType "private" like SpaceX): their broker
+// proxy symbol can collide with an unrelated public ticker on Yahoo and be
+// mispriced. Such names keep their editorial momentum and stay unpriced.
+const symbols =
+  cliSymbols.length > 0
+    ? cliSymbols
+    : universe.filter((company) => company.assetType !== "private").map((company) => company.symbol);
 const outputPath = path.resolve("public/data/live-signals.json");
 
 const apiKeys = {
@@ -70,20 +76,22 @@ async function fetchYahooMarket(symbol) {
     if (!meta || typeof meta.regularMarketPrice !== "number" || closes.length === 0) return undefined;
 
     const price = meta.regularMarketPrice;
-    const metrics = deriveMarketMetrics({
-      price,
-      closes,
-      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-      fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-    });
+    // Only trust strictly-positive 52-week bounds (providers sometimes return 0).
+    const high = meta.fiftyTwoWeekHigh > 0 ? meta.fiftyTwoWeekHigh : undefined;
+    const low = meta.fiftyTwoWeekLow > 0 ? meta.fiftyTwoWeekLow : undefined;
+    const metrics = deriveMarketMetrics({ price, closes, fiftyTwoWeekHigh: high, fiftyTwoWeekLow: low });
+
+    // meta.chartPreviousClose is the close *before the requested range* (a year
+    // ago here), not yesterday. Use the prior daily close from the same series.
+    const previousClose = closes.length >= 2 ? closes[closes.length - 2] : undefined;
 
     return {
       symbol,
       price,
       currency: meta.currency ?? "",
-      previousClose: meta.chartPreviousClose,
-      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-      fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+      previousClose,
+      fiftyTwoWeekHigh: high,
+      fiftyTwoWeekLow: low,
       ...metrics,
       asOf: new Date().toISOString(),
     };
