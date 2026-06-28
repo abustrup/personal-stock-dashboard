@@ -70,6 +70,43 @@ describe("buildInsights", () => {
     expect(insights.topOpportunity?.company.symbol).toBe("OPP");
     expect(insights.tilt?.theme).toBe("ai-infrastructure"); // 75% of weight
     expect(insights.topRisk?.recommendation.company.symbol).toBe("CCC"); // blocked → highest
+    // AAA is 40% of the book → single-name concentration crosses the threshold.
+    expect(insights.concentration?.top.company.symbol).toBe("AAA");
+    expect(insights.concentration?.weightPct).toBe(40);
+    expect(insights.concentration?.concentrated).toBe(true);
+  });
+
+  it("flags concentration on the top three even when no single name is large", () => {
+    const portfolio = [
+      rec({ symbol: "AAA", weight: 24 }),
+      rec({ symbol: "BBB", weight: 22 }),
+      rec({ symbol: "CCC", weight: 18 }),
+      rec({ symbol: "DDD", weight: 18 }),
+      rec({ symbol: "EEE", weight: 18 }),
+    ];
+
+    const insights = buildInsights(portfolio, []);
+
+    expect(insights.concentration?.top.company.symbol).toBe("AAA"); // largest position
+    expect(insights.concentration?.weightPct).toBe(24); // below the single-name threshold
+    expect(insights.concentration?.topThreeWeightPct).toBe(64); // 24 + 22 + 18
+    expect(insights.concentration?.concentrated).toBe(true); // top three ≥ 60%
+  });
+
+  it("reports a diversified book as not concentrated", () => {
+    const portfolio = [
+      rec({ symbol: "AAA", weight: 18 }),
+      rec({ symbol: "BBB", weight: 17 }),
+      rec({ symbol: "CCC", weight: 17 }),
+      rec({ symbol: "DDD", weight: 16 }),
+      rec({ symbol: "EEE", weight: 16 }),
+      rec({ symbol: "FFF", weight: 16 }),
+    ];
+
+    const insights = buildInsights(portfolio, []);
+
+    expect(insights.concentration?.topThreeWeightPct).toBe(52); // 18 + 17 + 17
+    expect(insights.concentration?.concentrated).toBe(false);
   });
 
   it("handles an empty portfolio without throwing", () => {
@@ -77,5 +114,6 @@ describe("buildInsights", () => {
     expect(insights.needsAttention.count).toBe(0);
     expect(insights.tilt).toBeUndefined();
     expect(insights.topOpportunity).toBeUndefined();
+    expect(insights.concentration).toBeUndefined();
   });
 });

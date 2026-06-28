@@ -195,15 +195,19 @@ export default function App() {
           />
           <InsightCard
             icon={Compass}
-            tone="neutral"
-            label="Portfolio tilt"
-            value={insights.tilt ? `${prettyTheme(insights.tilt.theme)} ${insights.tilt.weightPct.toFixed(0)}%` : "—"}
-            detail={
-              insights.tilt
-                ? `${insights.tilt.holdings} holding${insights.tilt.holdings === 1 ? "" : "s"} · biggest concentration`
-                : "Import a portfolio to see your tilt"
+            tone={insights.concentration?.concentrated ? "warn" : "neutral"}
+            label="Concentration"
+            value={
+              insights.concentration
+                ? `${insights.concentration.weightPct.toFixed(0)}% in ${insights.concentration.top.company.name}`
+                : "—"
             }
-            onClick={() => setView("opportunities")}
+            detail={
+              insights.concentration
+                ? `${insights.concentration.concentrated ? "Concentrated" : "Diversified"} · top 3 = ${insights.concentration.topThreeWeightPct.toFixed(0)}%${insights.tilt ? ` · ${prettyTheme(insights.tilt.theme)} tilt` : ""}`
+                : "Import a portfolio to see concentration"
+            }
+            onClick={() => open(insights.concentration?.top.company.symbol)}
           />
         </div>
       </section>

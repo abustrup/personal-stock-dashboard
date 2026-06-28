@@ -9,9 +9,29 @@ export type PortfolioInsights = {
   topOpportunity?: Recommendation;
   /** Where the portfolio is concentrated by theme (weight-weighted). */
   tilt?: { theme: string; weightPct: number; holdings: number };
+  /**
+   * Single-position concentration — a synthesis a broker shows the inputs for
+   * (per-line weights) but never editorialises into a portfolio-level risk.
+   */
+  concentration?: {
+    /** The single largest holding by portfolio weight. */
+    top: Recommendation;
+    /** Its share of the portfolio, as a percent number (e.g. 24.3). */
+    weightPct: number;
+    /** Combined share of the three largest holdings, as a percent number. */
+    topThreeWeightPct: number;
+    /** True when concentration crosses a commonly-cited risk threshold. */
+    concentrated: boolean;
+  };
   /** The single riskiest holding, by the model's risk axes + compliance. */
   topRisk?: { recommendation: Recommendation; riskScore: number };
 };
+
+// Commonly-cited single-name and top-holdings concentration thresholds. A book
+// is flagged when either the largest position dominates or the three largest
+// together make up most of it — both are risks a broker dashboard won't synthesise.
+const SINGLE_NAME_CONCENTRATION_PCT = 25;
+const TOP_THREE_CONCENTRATION_PCT = 60;
 
 function riskScore(rec: Recommendation): number {
   const c = rec.company;
@@ -41,8 +61,24 @@ export function buildInsights(portfolio: Recommendation[], opportunities: Recomm
     compliance: { count: flagged.length, top: flagged[0] },
     topOpportunity: opportunity,
     tilt: dominantTilt(portfolio),
+    concentration: positionConcentration(portfolio),
     topRisk,
   };
+}
+
+function positionConcentration(portfolio: Recommendation[]): PortfolioInsights["concentration"] {
+  const weighted = portfolio
+    .map((recommendation) => ({ recommendation, weight: recommendation.holding?.portfolioWeight ?? 0 }))
+    .filter((entry) => entry.weight > 0)
+    .sort((a, b) => b.weight - a.weight);
+  if (weighted.length === 0) return undefined;
+
+  const weightPct = weighted[0].weight;
+  const topThreeWeightPct = weighted.slice(0, 3).reduce((sum, entry) => sum + entry.weight, 0);
+  const concentrated =
+    weightPct >= SINGLE_NAME_CONCENTRATION_PCT || topThreeWeightPct >= TOP_THREE_CONCENTRATION_PCT;
+
+  return { top: weighted[0].recommendation, weightPct, topThreeWeightPct, concentrated };
 }
 
 function dominantTilt(portfolio: Recommendation[]): PortfolioInsights["tilt"] {
