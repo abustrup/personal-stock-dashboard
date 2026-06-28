@@ -48,12 +48,33 @@ export type Holding = {
   lastUpdated?: string;
 };
 
+/** Reported company fundamentals plus the 0-100 axes derived from them. */
+export type Fundamentals = {
+  // Raw reported values (for display); fractions where noted.
+  trailingPE?: number;
+  forwardPE?: number;
+  priceToSales?: number;
+  revenueGrowth?: number; // fraction, 0.85 = +85%
+  profitMargins?: number; // fraction
+  returnOnEquity?: number; // fraction
+  debtToEquity?: number;
+  currentRatio?: number;
+  marketCap?: number;
+  // Derived 0-100 axes (same scale as the editorial axes they replace).
+  growth: number;
+  quality: number;
+  valuationRisk: number;
+  balanceSheetRisk: number;
+};
+
 /** Real, measured price data from a market provider (currently keyless Yahoo). */
 export type MarketSnapshot = {
   symbol: string;
   price: number;
   currency: string;
   previousClose?: number;
+  /** One-day change as a percent number, e.g. -1.6 means -1.6%. */
+  dayChangePct?: number;
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   /** Trailing returns as percent numbers, e.g. 12.4 means +12.4%. */
@@ -64,6 +85,8 @@ export type MarketSnapshot = {
   rangePosition?: number;
   /** Momentum 0-100 derived from price action (not an editorial estimate). */
   momentum: number;
+  /** Present when fundamentals were fetched; replaces editorial growth/quality/valuation/balance-sheet. */
+  fundamentals?: Fundamentals;
   asOf: string;
 };
 

@@ -1,4 +1,4 @@
-import type { Company, MarketSnapshot } from "./types";
+import type { Company, Fundamentals, MarketSnapshot } from "./types";
 
 export type MarketMetrics = {
   return1m?: number;
@@ -62,6 +62,68 @@ export function deriveMarketMetrics(input: {
   return { return1m, return3m, return6m, rangePosition: position, momentum };
 }
 
+export type FundamentalInputs = {
+  trailingPE?: number;
+  forwardPE?: number;
+  priceToSales?: number;
+  revenueGrowth?: number;
+  earningsGrowth?: number;
+  profitMargins?: number;
+  returnOnEquity?: number;
+  debtToEquity?: number;
+  currentRatio?: number;
+  totalCash?: number;
+  totalDebt?: number;
+  marketCap?: number;
+};
+
+const num = (value: number | undefined): value is number => typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Turn reported fundamentals into the same 0-100 axes the editorial seeds use,
+ * so scoring stays unchanged but is driven by real data. Thresholds are explicit
+ * and documented — judgement-laden but transparent and reproducible.
+ */
+export function deriveFundamentalAxes(input: FundamentalInputs): {
+  growth: number;
+  quality: number;
+  valuationRisk: number;
+  balanceSheetRisk: number;
+} {
+  // Growth: revenue growth is primary; earnings growth a capped secondary.
+  const revScore = num(input.revenueGrowth) ? clamp01(0.4 + input.revenueGrowth * 1.2) : 0.5;
+  const earnScore = num(input.earningsGrowth) ? clamp01(0.4 + Math.min(input.earningsGrowth, 1) * 0.8) : revScore;
+  const growth = Math.round(100 * (0.7 * revScore + 0.3 * earnScore));
+
+  // Quality: profit margins + return on equity.
+  const marginScore = num(input.profitMargins) ? clamp01(input.profitMargins * 2.2) : 0.5;
+  const roeScore = num(input.returnOnEquity) ? clamp01(input.returnOnEquity * 1.8) : 0.5;
+  const quality = Math.round(100 * (0.55 * marginScore + 0.45 * roeScore));
+
+  // Valuation risk: forward P/E (preferred) blended with price/sales. Higher = pricier.
+  const pe = num(input.forwardPE) ? input.forwardPE : input.trailingPE;
+  const peRisk = num(pe) ? clamp01((pe - 8) / 52) : 0.5; // 8x → 0, 60x → 1
+  const psRisk = num(input.priceToSales) ? clamp01((input.priceToSales - 1) / 19) : peRisk; // 1x → 0, 20x → 1
+  const valuationRisk = Math.round(100 * (0.6 * peRisk + 0.4 * psRisk));
+
+  // Balance-sheet risk: the sign of net cash is decisive (a net-cash company is
+  // low-risk regardless of size); net debt relative to market cap scales the rest.
+  let bsRisk = 45;
+  if (num(input.totalCash) && num(input.totalDebt) && num(input.marketCap) && input.marketCap > 0) {
+    const netCashRatio = (input.totalCash - input.totalDebt) / input.marketCap;
+    bsRisk =
+      netCashRatio >= 0
+        ? Math.max(15, 35 - netCashRatio * 100) // net cash → 15-35
+        : Math.min(95, 50 - netCashRatio * 120); // net debt → 50-95
+  } else if (num(input.debtToEquity)) {
+    bsRisk = 20 + input.debtToEquity * 0.28; // treat as percent: 100% → 48
+  }
+  if (num(input.currentRatio) && input.currentRatio < 1) bsRisk += (1 - input.currentRatio) * 30;
+  const balanceSheetRisk = Math.round(Math.max(0, Math.min(100, bsRisk)));
+
+  return { growth, quality, valuationRisk, balanceSheetRisk };
+}
+
 export type MarketSnapshotMap = Record<string, MarketSnapshot>;
 
 /**
@@ -72,5 +134,15 @@ export type MarketSnapshotMap = Record<string, MarketSnapshot>;
 export function mergeMarketSnapshot<T extends Company>(company: T, snapshots: MarketSnapshotMap): T {
   const snapshot = snapshots[company.symbol];
   if (!snapshot) return company;
-  return { ...company, momentum: snapshot.momentum, market: snapshot };
+  const merged: T = { ...company, momentum: snapshot.momentum, market: snapshot };
+  // Replace the measurable editorial axes with fundamentals-derived ones when
+  // available. aiExposure and geopoliticalRisk stay editorial (thesis inputs).
+  const f: Fundamentals | undefined = snapshot.fundamentals;
+  if (f) {
+    merged.growth = f.growth;
+    merged.quality = f.quality;
+    merged.valuationRisk = f.valuationRisk;
+    merged.balanceSheetRisk = f.balanceSheetRisk;
+  }
+  return merged;
 }

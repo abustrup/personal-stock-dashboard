@@ -37,7 +37,7 @@ export function recommendCompany(
     conviction: convictionFor(score, measured),
     measured,
     score,
-    reasoning: buildReasoning(company, score, compliance.status, momentumMeasured),
+    reasoning: buildReasoning(company, score, compliance.status, momentumMeasured, Boolean(company.market?.fundamentals)),
     downside: downsideFor(company),
     compliance,
     newsSignal: company.newsSignal,
@@ -110,11 +110,17 @@ function buildReasoning(
   score: number,
   complianceStatus: string,
   momentumMeasured: boolean,
+  fundamentalsMeasured: boolean,
 ): string[] {
   const momentumLabel = momentumMeasured ? "measured from price" : "editorial estimate";
+  const fundLabel = fundamentalsMeasured ? "measured from fundamentals" : "editorial estimate";
   const reasons = [
-    `Score ${score}/100 — a medium-high-risk blend of measured price action and editorial estimates.`,
-    `AI exposure (editorial estimate) ${company.aiExposure}/100; momentum ${company.momentum}/100 (${momentumLabel}).`,
+    `Score ${score}/100, medium-high-risk weighting. AI exposure and geopolitical risk are editorial; the rest is ${
+      momentumMeasured && fundamentalsMeasured ? "measured market data" : "partly editorial"
+    }.`,
+    `Momentum ${company.momentum}/100 (${momentumLabel}).`,
+    `Growth ${company.growth}/100, quality ${company.quality}/100, valuation risk ${company.valuationRisk}/100 (${fundLabel}).`,
+    `AI exposure (editorial) ${company.aiExposure}/100.`,
     `News signal is ${company.newsSignal.direction}: ${company.newsSignal.summary}`,
     `Expert signal is ${company.expertSignal.direction}: ${company.expertSignal.summary}`,
   ];

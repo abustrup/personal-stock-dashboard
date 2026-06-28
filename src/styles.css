@@ -401,12 +401,16 @@ h3 {
 
 .position {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
   padding: 14px;
   border: 1px solid #ebe7dc;
   border-radius: 8px;
   background: #fbfaf6;
+}
+
+.position.fundamentals {
+  background: #f3f6fb;
 }
 
 .position-stat {

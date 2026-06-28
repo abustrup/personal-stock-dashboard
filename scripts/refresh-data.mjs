@@ -9,8 +9,10 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { deriveMarketMetrics } from "../src/lib/market.ts";
+import { deriveFundamentalAxes, deriveMarketMetrics } from "../src/lib/market.ts";
 import { universe } from "../src/data/universe.ts";
+
+const UA = "Mozilla/5.0";
 
 const cliSymbols = process.argv.slice(2);
 // Skip non-listed names (e.g. assetType "private" like SpaceX): their broker
@@ -30,13 +32,23 @@ const apiKeys = {
 const market = {};
 const signals = {};
 const sources = ["Yahoo Finance (keyless prices)"];
+
+// A crumb/cookie session unlocks the keyless fundamentals endpoint.
+const session = await getYahooSession();
+if (session) sources.push("Yahoo fundamentals (valuation/growth/quality/balance-sheet)");
 if (apiKeys.alphaVantage) sources.push("Alpha Vantage News Sentiment");
 if (apiKeys.finnhub) sources.push("Finnhub Recommendation Trends");
 
 let priced = 0;
+let withFundamentals = 0;
 for (const symbol of symbols) {
   const snapshot = await fetchYahooMarket(symbol);
   if (snapshot) {
+    const fundamentals = await fetchYahooFundamentals(symbol, session);
+    if (fundamentals) {
+      snapshot.fundamentals = fundamentals;
+      withFundamentals += 1;
+    }
     market[symbol] = snapshot;
     priced += 1;
   }
@@ -55,7 +67,10 @@ await fs.writeFile(
   `${JSON.stringify({ generatedAt: new Date().toISOString(), sources, market, signals }, null, 2)}\n`,
 );
 
-console.log(`Wrote ${outputPath} — priced ${priced}/${symbols.length} symbols via Yahoo.`);
+console.log(
+  `Wrote ${outputPath} — priced ${priced}/${symbols.length} symbols via Yahoo, fundamentals for ${withFundamentals}.`,
+);
+if (!session) console.log("Fundamentals skipped (no Yahoo crumb session) — growth/quality/valuation stay editorial.");
 if (priced < symbols.length) {
   const missing = symbols.filter((s) => !market[s]);
   console.log(`No price for: ${missing.join(", ")} (private/unlisted or provider gap — confidence lowered, not blocked).`);
@@ -84,16 +99,90 @@ async function fetchYahooMarket(symbol) {
     // meta.chartPreviousClose is the close *before the requested range* (a year
     // ago here), not yesterday. Use the prior daily close from the same series.
     const previousClose = closes.length >= 2 ? closes[closes.length - 2] : undefined;
+    const dayChangePct =
+      previousClose && previousClose > 0 ? Math.round((price / previousClose - 1) * 10000) / 100 : undefined;
 
     return {
       symbol,
       price,
       currency: meta.currency ?? "",
       previousClose,
+      dayChangePct,
       fiftyTwoWeekHigh: high,
       fiftyTwoWeekLow: low,
       ...metrics,
       asOf: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+// Yahoo's fundamentals endpoint needs a cookie + crumb obtained once per run.
+async function getYahooSession() {
+  try {
+    const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA } });
+    const setCookies = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
+    const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
+    const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA, Cookie: cookie },
+    });
+    const crumb = (await cr.text()).trim();
+    if (!crumb || crumb.includes("<") || crumb.length > 40) return undefined;
+    return { cookie, crumb };
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchYahooFundamentals(symbol, session) {
+  if (!session) return undefined;
+  const url = new URL(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`);
+  url.searchParams.set("modules", "financialData,defaultKeyStatistics,summaryDetail");
+  url.searchParams.set("crumb", session.crumb);
+
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA, Cookie: session.cookie } });
+    if (!r.ok) return undefined;
+    const data = await r.json();
+    const res = data?.quoteSummary?.result?.[0];
+    if (!res) return undefined;
+    const fd = res.financialData ?? {};
+    const ks = res.defaultKeyStatistics ?? {};
+    const sd = res.summaryDetail ?? {};
+    const raw = (x) => (x && typeof x.raw === "number" ? x.raw : undefined);
+
+    const inputs = {
+      trailingPE: raw(sd.trailingPE),
+      forwardPE: raw(sd.forwardPE) ?? raw(ks.forwardPE),
+      priceToSales: raw(sd.priceToSalesTrailing12Months) ?? raw(ks.priceToSalesTrailing12Months),
+      revenueGrowth: raw(fd.revenueGrowth),
+      earningsGrowth: raw(fd.earningsGrowth),
+      profitMargins: raw(fd.profitMargins) ?? raw(ks.profitMargins),
+      returnOnEquity: raw(fd.returnOnEquity),
+      debtToEquity: raw(fd.debtToEquity),
+      currentRatio: raw(fd.currentRatio),
+      totalCash: raw(fd.totalCash),
+      totalDebt: raw(fd.totalDebt),
+      marketCap: raw(sd.marketCap),
+    };
+    // Need at least one real signal to be worth attaching.
+    const hasSignal = [inputs.revenueGrowth, inputs.profitMargins, inputs.trailingPE, inputs.forwardPE].some(
+      (v) => typeof v === "number",
+    );
+    if (!hasSignal) return undefined;
+
+    return {
+      trailingPE: inputs.trailingPE,
+      forwardPE: inputs.forwardPE,
+      priceToSales: inputs.priceToSales,
+      revenueGrowth: inputs.revenueGrowth,
+      profitMargins: inputs.profitMargins,
+      returnOnEquity: inputs.returnOnEquity,
+      debtToEquity: inputs.debtToEquity,
+      currentRatio: inputs.currentRatio,
+      marketCap: inputs.marketCap,
+      ...deriveFundamentalAxes(inputs),
     };
   } catch {
     return undefined;

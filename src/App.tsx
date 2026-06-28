@@ -219,7 +219,7 @@ function RecommendationList({
                 <strong>{item.company.name}</strong>
                 <span>{item.company.symbol} · {item.company.region}</span>
               </div>
-              {item.holding && (
+              {item.holding ? (
                 <div className="row-pl">
                   <span className={`pl ${toneClass(item.holding.totalReturnPct)}`}>
                     {formatSignedPct(item.holding.totalReturnPct)}
@@ -228,7 +228,14 @@ function RecommendationList({
                     {item.holding.portfolioWeight.toFixed(1)}% · {formatSignedPct(item.holding.dayReturnPct)} today
                   </span>
                 </div>
-              )}
+              ) : item.company.market ? (
+                <div className="row-pl">
+                  <span className={`pl ${toneClass(item.company.market.dayChangePct)}`}>
+                    {formatSignedPct(item.company.market.dayChangePct)}
+                  </span>
+                  <span className="muted">today</span>
+                </div>
+              ) : null}
               <div className="row-right">
                 <Action action={item.action} />
                 <span className="score">{item.score}</span>
@@ -263,8 +270,9 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
       </div>
 
       <p className="estimate-note">
-        The score blends measured price action with editorial estimates from the curated universe.
-        {!market && " No live price for this name — momentum here is an editorial estimate, not measured."}
+        Momentum, growth, quality, valuation and balance-sheet risk are measured from live market data when
+        available; AI exposure and geopolitical risk are editorial thesis inputs.
+        {!market && " No live data for this name — every axis here is an editorial estimate."}
       </p>
 
       {holding && (
@@ -287,9 +295,11 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
 
       {market && (
         <div className="position market" aria-label="live market">
+          <PositionStat label="Live price" value={`${formatPrice(market.price)} ${market.currency}`} />
           <PositionStat
-            label="Live price"
-            value={`${formatPrice(market.price)} ${market.currency}`}
+            label="Today (live)"
+            value={formatSignedPct(market.dayChangePct)}
+            tone={toneOf(market.dayChangePct ?? 0)}
           />
           <PositionStat
             label="1M / 3M"
@@ -306,6 +316,17 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
             }
           />
           <PositionStat label="Momentum" value={`${market.momentum}/100 (measured)`} />
+        </div>
+      )}
+
+      {market?.fundamentals && (
+        <div className="position fundamentals" aria-label="fundamentals">
+          <PositionStat label="Fwd / trail P/E" value={`${formatRatio(market.fundamentals.forwardPE)} / ${formatRatio(market.fundamentals.trailingPE)}`} />
+          <PositionStat label="Price / sales" value={formatRatio(market.fundamentals.priceToSales)} />
+          <PositionStat label="Revenue growth" value={formatSignedPct(toPct(market.fundamentals.revenueGrowth))} tone={toneOf(market.fundamentals.revenueGrowth ?? 0)} />
+          <PositionStat label="Profit margin" value={formatSignedPct(toPct(market.fundamentals.profitMargins))} />
+          <PositionStat label="Return on equity" value={formatSignedPct(toPct(market.fundamentals.returnOnEquity))} />
+          <PositionStat label="Quality / val. risk" value={`${company.quality} / ${company.valuationRisk}`} />
         </div>
       )}
 
@@ -386,6 +407,15 @@ function toneClass(value: number | undefined): string {
 
 function formatPrice(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatRatio(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(1)}×`;
+}
+
+function toPct(fraction: number | undefined): number | undefined {
+  return fraction === undefined || !Number.isFinite(fraction) ? undefined : fraction * 100;
 }
 
 function formatAsOf(iso: string): string {
