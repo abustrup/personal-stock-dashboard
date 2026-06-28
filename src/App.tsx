@@ -1,36 +1,50 @@
-import { AlertTriangle, BriefcaseBusiness, FileUp, Radar, Search, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  BriefcaseBusiness,
+  Compass,
+  FileUp,
+  Radar,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
 import { buildDashboardModel } from "./lib/dashboard";
+import { buildInsights } from "./lib/insights";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
-import type { Holding, MarketSnapshot, Recommendation } from "./lib/types";
+import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
+import type { Company, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "detail";
 
 const tabs: Array<{ id: View; label: string; icon: typeof BriefcaseBusiness }> = [
   { id: "portfolio", label: "Portfolio", icon: BriefcaseBusiness },
   { id: "opportunities", label: "Opportunities", icon: Radar },
-  { id: "detail", label: "Company Detail", icon: Search },
+  { id: "detail", label: "Company", icon: Search },
 ];
 
+const stored = loadPortfolio();
+
 export default function App() {
-  const [holdings, setHoldings] = useState<Holding[]>(seedHoldings);
+  const [holdings, setHoldings] = useState<Holding[]>(stored?.holdings ?? seedHoldings);
+  const [source, setSource] = useState<{ label: string; isDemo: boolean }>(
+    stored ? { label: `Imported ${formatDate(stored.importedAt)}`, isDemo: false } : { label: "Demo portfolio", isDemo: true },
+  );
   const [view, setView] = useState<View>("portfolio");
-  const [selectedSymbol, setSelectedSymbol] = useState<string | undefined>("NVDA");
-  const [importNotice, setImportNotice] = useState("Showing a demo portfolio — import your CSV to see your own positions.");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | undefined>(holdings[0]?.symbol);
   const [externalSignals, setExternalSignals] = useState<ExternalSignalSnapshot>({});
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshotMap>({});
   const [dataAsOf, setDataAsOf] = useState<string | undefined>();
 
   useEffect(() => {
     let cancelled = false;
-
-    // BASE_URL is "/" in dev and "/<repo>/" on GitHub Pages, so the snapshot
-    // resolves correctly in both.
     fetch(`${import.meta.env.BASE_URL}data/live-signals.json`)
       .then((response) => (response.ok ? response.json() : undefined))
       .then(
@@ -46,7 +60,6 @@ export default function App() {
         },
       )
       .catch(() => undefined);
-
     return () => {
       cancelled = true;
     };
@@ -64,18 +77,36 @@ export default function App() {
     () => buildDashboardModel(holdings, enrichedUniverse, complianceOverrides),
     [holdings, enrichedUniverse],
   );
+  const insights = useMemo(() => buildInsights(model.portfolio, model.opportunities), [model]);
   const selected =
     model.all.find((recommendation) => recommendation.company.symbol === selectedSymbol) ??
     model.topIdea ??
     model.portfolio[0];
 
+  function open(symbol: string | undefined) {
+    if (!symbol) return;
+    setSelectedSymbol(symbol);
+    setView("detail");
+  }
+
   async function handleFileUpload(file: File | undefined) {
     if (!file) return;
     const text = await file.text();
     const parsed = parsePortfolioCsv(text);
+    if (parsed.holdings.length === 0) return;
+    const importedAt = new Date().toISOString();
+    savePortfolio(parsed.holdings, file.name, importedAt);
     setHoldings(parsed.holdings);
-    setImportNotice(`Imported ${parsed.holdings.length} positions. Skipped ${parsed.skippedRows} broker summary rows.`);
+    setSource({ label: `Imported ${formatDate(importedAt)} · saved in this browser`, isDemo: false });
     setSelectedSymbol(parsed.holdings[0]?.symbol);
+    setView("portfolio");
+  }
+
+  function resetToDemo() {
+    clearPortfolio();
+    setHoldings(seedHoldings);
+    setSource({ label: "Demo portfolio", isDemo: true });
+    setSelectedSymbol(seedHoldings[0]?.symbol);
     setView("portfolio");
   }
 
@@ -83,39 +114,98 @@ export default function App() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Medium-high-risk decision support</p>
+          <p className="eyebrow">Decision support beyond your broker</p>
           <h1>Personal Stock Dashboard</h1>
         </div>
-        <label className="upload">
-          <FileUp aria-hidden="true" size={18} />
-          <span>Import CSV</span>
-          <input type="file" accept=".csv,text/csv" onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
-        </label>
+        <div className="topbar-actions">
+          {!source.isDemo && (
+            <button className="ghost" type="button" onClick={resetToDemo} title="Forget the saved portfolio">
+              <RotateCcw aria-hidden="true" size={15} />
+              <span>Reset</span>
+            </button>
+          )}
+          <label className="upload">
+            <FileUp aria-hidden="true" size={17} />
+            <span>Import CSV</span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleFileUpload(event.target.files?.[0])}
+            />
+          </label>
+        </div>
       </header>
 
       <section className="notice" aria-label="compliance notice">
         <ShieldAlert size={20} aria-hidden="true" />
         <div>
-          <strong>EIFO status is not clean by default.</strong>
+          <strong>EIFO compliance is built in — your broker has no idea about it.</strong>
           <span>
-            The app only uses the policy PDF you provided. It blocks named policy exclusions, flags possible overlap and never clears a company without current EIFO lists.
+            Blocks the policy negative list, flags possible overlap, and never clears a company without current EIFO
+            lists.
           </span>
         </div>
       </section>
 
-      <section className="metrics" aria-label="summary">
-        <Metric label="Portfolio value" value={`DKK ${formatNumber(model.totalMarketValueDkk)}`} />
-        <Metric
-          label="Total return"
-          value={`${formatSignedPct(model.totalReturnPct)} · DKK ${formatSigned(model.totalGainDkk)}`}
-          tone={toneOf(model.totalGainDkk)}
-        />
-        <Metric
-          label="Today"
-          value={`DKK ${formatSigned(model.dayGainDkk)}`}
-          tone={toneOf(model.dayGainDkk)}
-        />
-        <Metric label="Holdings" value={String(model.portfolio.length)} />
+      <section className="insights" aria-label="what your broker doesn't tell you">
+        <div className="insights-head">
+          <h2>What Saxo doesn&apos;t tell you</h2>
+          <span className={hasLiveMarket ? "fresh tone-up" : "fresh muted"}>
+            {hasLiveMarket
+              ? `Live data${dataAsOf ? ` · ${formatAsOf(dataAsOf)}` : ""}`
+              : "Editorial estimates · run npm run refresh"}
+          </span>
+        </div>
+        <div className="insight-grid">
+          <InsightCard
+            icon={TriangleAlert}
+            tone={insights.needsAttention.count > 0 ? "warn" : "calm"}
+            label="Needs attention"
+            value={insights.needsAttention.count > 0 ? `${insights.needsAttention.count} to review` : "All clear"}
+            detail={
+              insights.needsAttention.top
+                ? `${insights.needsAttention.top.action} · ${insights.needsAttention.top.company.name}`
+                : "Nothing flagged to trim or avoid"
+            }
+            onClick={() => open(insights.needsAttention.top?.company.symbol)}
+          />
+          <InsightCard
+            icon={insights.compliance.count > 0 ? ShieldAlert : ShieldCheck}
+            tone={insights.compliance.count > 0 ? "warn" : "calm"}
+            label="EIFO compliance"
+            value={insights.compliance.count > 0 ? `${insights.compliance.count} flagged` : "None flagged"}
+            detail={
+              insights.compliance.top
+                ? `${insights.compliance.top.compliance.status.replace("_", " ")} · ${insights.compliance.top.company.name}`
+                : "No holding blocked or overlapping"
+            }
+            onClick={() => open(insights.compliance.top?.company.symbol)}
+          />
+          <InsightCard
+            icon={Radar}
+            tone="idea"
+            label="Top opportunity"
+            value={insights.topOpportunity ? insights.topOpportunity.company.name : "—"}
+            detail={
+              insights.topOpportunity
+                ? `${insights.topOpportunity.action} · score ${insights.topOpportunity.score} · you don't own it`
+                : "No standout idea right now"
+            }
+            onClick={() => open(insights.topOpportunity?.company.symbol)}
+          />
+          <InsightCard
+            icon={Compass}
+            tone="neutral"
+            label="Portfolio tilt"
+            value={insights.tilt ? `${prettyTheme(insights.tilt.theme)} ${insights.tilt.weightPct.toFixed(0)}%` : "—"}
+            detail={
+              insights.tilt
+                ? `${insights.tilt.holdings} holding${insights.tilt.holdings === 1 ? "" : "s"} · biggest concentration`
+                : "Import a portfolio to see your tilt"
+            }
+            onClick={() => setView("opportunities")}
+          />
+        </div>
       </section>
 
       <nav className="tabs" aria-label="dashboard views">
@@ -128,123 +218,132 @@ export default function App() {
               type="button"
               aria-current={view === tab.id ? "page" : undefined}
               onClick={() => setView(tab.id)}
-              title={tab.label}
             >
-              <Icon aria-hidden="true" size={18} />
+              <Icon aria-hidden="true" size={17} />
               <span>{tab.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <p className="import-note">
-        {importNotice}
-        {" · "}
-        {hasLiveMarket ? (
-          <span className="tone-up">
-            Live market data{dataAsOf ? ` · refreshed ${formatAsOf(dataAsOf)}` : ""}
-          </span>
-        ) : (
-          <span className="muted">Editorial estimates only — run npm run refresh for live prices</span>
-        )}
+      <p className="source-line">
+        <span>
+          {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} · {formatSignedPct(model.totalReturnPct)} total
+        </span>
       </p>
 
       {view === "portfolio" && (
-        <RecommendationList
-          title="Portfolio"
-          items={model.portfolio}
-          empty="No holdings loaded."
-          onSelect={(symbol) => {
-            setSelectedSymbol(symbol);
-            setView("detail");
-          }}
-        />
+        <DecisionList title="Your holdings" subtitle="Ranked by what to do next" items={model.portfolio} onSelect={open} />
       )}
-
       {view === "opportunities" && (
-        <RecommendationList
+        <DecisionList
           title="Opportunities"
-          items={model.opportunities.slice(0, 8)}
-          empty="No opportunities in the current universe."
-          onSelect={(symbol) => {
-            setSelectedSymbol(symbol);
-            setView("detail");
-          }}
+          subtitle="Names you don't own — your broker won't surface these"
+          items={model.opportunities.slice(0, 10)}
+          onSelect={open}
         />
       )}
-
       {view === "detail" && selected && <CompanyDetail recommendation={selected} />}
     </main>
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+function InsightCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+  detail,
+  onClick,
+}: {
+  icon: typeof Radar;
+  tone: "warn" | "calm" | "idea" | "neutral";
+  label: string;
+  value: string;
+  detail: string;
+  onClick?: () => void;
+}) {
   return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong className={tone ? `tone-${tone}` : undefined}>{value}</strong>
-    </div>
+    <button className={`insight ${tone}`} type="button" onClick={onClick}>
+      <span className="insight-label">
+        <Icon aria-hidden="true" size={15} />
+        {label}
+      </span>
+      <strong className="insight-value">{value}</strong>
+      <span className="insight-detail">{detail}</span>
+    </button>
   );
 }
 
-function RecommendationList({
+function DecisionList({
   title,
+  subtitle,
   items,
-  empty,
   onSelect,
 }: {
   title: string;
+  subtitle: string;
   items: Recommendation[];
-  empty: string;
   onSelect: (symbol: string) => void;
 }) {
   return (
     <section className="panel" aria-label={title}>
       <div className="panel-heading">
-        <h2>{title}</h2>
-        <span>{items.length} names</span>
+        <div>
+          <h2>{title}</h2>
+          <span>{subtitle}</span>
+        </div>
+        <span className="count">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="empty">{empty}</p>
+        <p className="empty">Nothing to show yet.</p>
       ) : (
-        <div className="recommendation-grid">
+        <div className="decision-grid">
           {items.map((item) => (
-            <button
-              key={item.company.symbol}
-              className="stock-row"
-              type="button"
-              onClick={() => onSelect(item.company.symbol)}
-            >
-              <div className="row-id">
-                <strong>{item.company.name}</strong>
-                <span>{item.company.symbol} · {item.company.region}</span>
-              </div>
-              {item.holding ? (
-                <div className="row-pl">
-                  <span className={`pl ${toneClass(item.holding.totalReturnPct)}`}>
-                    {formatSignedPct(item.holding.totalReturnPct)}
-                  </span>
-                  <span className="muted">
-                    {item.holding.portfolioWeight.toFixed(1)}% · {formatSignedPct(item.holding.dayReturnPct)} today
-                  </span>
-                </div>
-              ) : item.company.market ? (
-                <div className="row-pl">
-                  <span className={`pl ${toneClass(item.company.market.dayChangePct)}`}>
-                    {formatSignedPct(item.company.market.dayChangePct)}
-                  </span>
-                  <span className="muted">today</span>
-                </div>
-              ) : null}
-              <div className="row-right">
-                <Action action={item.action} />
-                <span className="score">{item.score}</span>
-              </div>
-            </button>
+            <DecisionCard key={item.company.symbol} item={item} onSelect={onSelect} />
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (symbol: string) => void }) {
+  const { company, holding, compliance } = item;
+  return (
+    <button className="decision-card" type="button" onClick={() => onSelect(company.symbol)}>
+      <ScoreRing score={item.score} action={item.action} />
+      <div className="dc-body">
+        <div className="dc-top">
+          <Action action={item.action} />
+          <span className="dc-conviction">
+            {item.conviction} · {item.measured ? "data-backed" : "editorial"}
+          </span>
+          {compliance.status !== "unknown" && (
+            <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
+          )}
+        </div>
+        <strong className="dc-name">{company.name}</strong>
+        <p className="dc-why">{item.headline}</p>
+      </div>
+      <div className="dc-right">
+        {holding ? (
+          <>
+            <span className={`dc-return ${toneClass(holding.totalReturnPct)}`}>
+              {formatSignedPct(holding.totalReturnPct)}
+            </span>
+            <span className="dc-broker">{holding.portfolioWeight.toFixed(0)}% · from Saxo</span>
+          </>
+        ) : company.market ? (
+          <>
+            <span className={`dc-return ${toneClass(company.market.dayChangePct)}`}>
+              {formatSignedPct(company.market.dayChangePct)}
+            </span>
+            <span className="dc-broker">today</span>
+          </>
+        ) : null}
+      </div>
+    </button>
   );
 }
 
@@ -256,91 +355,43 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
     <section className="detail">
       <div className="detail-hero">
         <div>
-          <span className="symbol">{company.symbol}</span>
+          <span className="symbol">{company.symbol} · {company.region}</span>
           <h2>{company.name}</h2>
-          <p>{company.themes.join(" · ")}</p>
+          <p>{company.themes.map(prettyTheme).join(" · ")}</p>
         </div>
         <div className="detail-action">
+          <ScoreRing score={recommendation.score} action={recommendation.action} large />
           <Action action={recommendation.action} />
-          <strong>{recommendation.score}/100</strong>
           <span>
             {recommendation.conviction} conviction · {recommendation.measured ? "data-backed" : "editorial only"}
           </span>
         </div>
       </div>
 
-      <p className="estimate-note">
-        Momentum, growth, quality, valuation and balance-sheet risk are measured from live market data when
-        available; AI exposure and geopolitical risk are editorial thesis inputs.
-        {!market && " No live data for this name — every axis here is an editorial estimate."}
-      </p>
+      <p className={`headline ${recommendation.action}`}>{recommendation.headline}</p>
 
-      {holding && (
-        <div className="position" aria-label="your position">
-          <PositionStat label="Position" value={`${formatNumber(holding.quantity)} × ${company.symbol}`} />
-          <PositionStat label="Market value" value={`DKK ${formatNumber(holding.marketValueDkk)}`} />
-          <PositionStat
-            label="Total return"
-            value={`${formatSignedPct(holding.totalReturnPct)} · DKK ${formatSigned(holding.totalGainDkk ?? 0)}`}
-            tone={toneOf(holding.totalGainDkk ?? 0)}
-          />
-          <PositionStat
-            label="Today"
-            value={`${formatSignedPct(holding.dayReturnPct)} · DKK ${formatSigned(holding.dayGainDkk ?? 0)}`}
-            tone={toneOf(holding.dayGainDkk ?? 0)}
-          />
-          <PositionStat label="Weight" value={`${holding.portfolioWeight.toFixed(1)}%`} />
-        </div>
-      )}
-
-      {market && (
-        <div className="position market" aria-label="live market">
-          <PositionStat label="Live price" value={`${formatPrice(market.price)} ${market.currency}`} />
-          <PositionStat
-            label="Today (live)"
-            value={formatSignedPct(market.dayChangePct)}
-            tone={toneOf(market.dayChangePct ?? 0)}
-          />
-          <PositionStat
-            label="1M / 3M"
-            value={`${formatSignedPct(market.return1m)} · ${formatSignedPct(market.return3m)}`}
-            tone={toneOf(market.return3m ?? 0)}
-          />
-          <PositionStat label="6M" value={formatSignedPct(market.return6m)} tone={toneOf(market.return6m ?? 0)} />
-          <PositionStat
-            label="52w range"
-            value={
-              market.fiftyTwoWeekLow !== undefined && market.fiftyTwoWeekHigh !== undefined
-                ? `${formatPrice(market.fiftyTwoWeekLow)}–${formatPrice(market.fiftyTwoWeekHigh)}`
-                : "—"
-            }
-          />
-          <PositionStat label="Momentum" value={`${market.momentum}/100 (measured)`} />
-        </div>
-      )}
-
-      {market?.fundamentals && (
-        <div className="position fundamentals" aria-label="fundamentals">
-          <PositionStat label="Fwd / trail P/E" value={`${formatRatio(market.fundamentals.forwardPE)} / ${formatRatio(market.fundamentals.trailingPE)}`} />
-          <PositionStat label="Price / sales" value={formatRatio(market.fundamentals.priceToSales)} />
-          <PositionStat label="Revenue growth" value={formatSignedPct(toPct(market.fundamentals.revenueGrowth))} tone={toneOf(market.fundamentals.revenueGrowth ?? 0)} />
-          <PositionStat label="Profit margin" value={formatSignedPct(toPct(market.fundamentals.profitMargins))} tone={toneOf(market.fundamentals.profitMargins ?? 0)} />
-          <PositionStat label="Return on equity" value={formatSignedPct(toPct(market.fundamentals.returnOnEquity))} tone={toneOf(market.fundamentals.returnOnEquity ?? 0)} />
-          <PositionStat label="Quality / val. risk" value={`${company.quality} / ${company.valuationRisk}`} />
-        </div>
-      )}
-
-      <div className="detail-grid">
-        <InfoBlock title="Reasoning" lines={recommendation.reasoning} />
-        <InfoBlock title="Downside" lines={[recommendation.downside]} />
-        <InfoBlock title="News Signal" lines={[recommendation.newsSignal.summary, recommendation.freshness]} />
-        <InfoBlock title="Expert Signal" lines={[recommendation.expertSignal.summary]} />
+      <div className="analysis">
+        <article className="card">
+          <h3>Why this score</h3>
+          <DriverBars company={company} />
+          <p className="estimate-note">
+            Momentum, growth, quality, valuation and balance-sheet risk are measured from live data when available;
+            AI exposure and geopolitical risk are editorial thesis inputs.
+          </p>
+        </article>
+        <article className="card">
+          <h3>Reasoning</h3>
+          {recommendation.reasoning.map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+          <p className="downside">{recommendation.downside}</p>
+        </article>
       </div>
 
       <div className={`compliance ${compliance.status}`}>
         <AlertTriangle size={18} aria-hidden="true" />
         <div>
-          <strong>{compliance.status.replace("_", " ")}</strong>
+          <strong>EIFO: {compliance.status.replace("_", " ")}</strong>
           {compliance.flags.map((flag) => (
             <span key={flag}>{flag}</span>
           ))}
@@ -352,24 +403,114 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
           <span className="note">Source: {compliance.source}</span>
         </div>
       </div>
+
+      {market && (
+        <article className="card market-card">
+          <h3>Market context</h3>
+          {market.fiftyTwoWeekLow !== undefined && market.fiftyTwoWeekHigh !== undefined && (
+            <RangeBar low={market.fiftyTwoWeekLow} high={market.fiftyTwoWeekHigh} price={market.price} currency={market.currency} />
+          )}
+          <div className="context-stats">
+            <Stat label="Today" value={formatSignedPct(market.dayChangePct)} tone={toneOf(market.dayChangePct ?? 0)} />
+            <Stat label="3M / 6M" value={`${formatSignedPct(market.return3m)} · ${formatSignedPct(market.return6m)}`} tone={toneOf(market.return3m ?? 0)} />
+            <Stat label="Momentum" value={`${market.momentum}/100`} />
+            {market.fundamentals && (
+              <>
+                <Stat label="Fwd P/E" value={formatRatio(market.fundamentals.forwardPE)} />
+                <Stat label="Rev. growth" value={formatSignedPct(toPct(market.fundamentals.revenueGrowth))} tone={toneOf(market.fundamentals.revenueGrowth ?? 0)} />
+                <Stat label="Profit margin" value={formatSignedPct(toPct(market.fundamentals.profitMargins))} tone={toneOf(market.fundamentals.profitMargins ?? 0)} />
+              </>
+            )}
+          </div>
+        </article>
+      )}
+
+      {holding && (
+        <div className="broker-strip" aria-label="your position from your broker">
+          <span className="broker-tag">From Saxo</span>
+          <Stat label="Position" value={`${formatNumber(holding.quantity)} sh`} />
+          <Stat label="Value" value={`DKK ${formatNumber(holding.marketValueDkk)}`} />
+          <Stat
+            label="Total"
+            value={`${formatSignedPct(holding.totalReturnPct)} · DKK ${formatSigned(holding.totalGainDkk ?? 0)}`}
+            tone={toneOf(holding.totalGainDkk ?? 0)}
+          />
+          <Stat label="Weight" value={`${holding.portfolioWeight.toFixed(1)}%`} />
+        </div>
+      )}
     </section>
   );
 }
 
-function InfoBlock({ title, lines }: { title: string; lines: string[] }) {
+function DriverBars({ company }: { company: Company }) {
+  const fundamentals = Boolean(company.market?.fundamentals);
+  const momentum = Boolean(company.market);
+  const drivers = [
+    { label: "Momentum", value: company.momentum, measured: momentum },
+    { label: "Growth", value: company.growth, measured: fundamentals },
+    { label: "Quality", value: company.quality, measured: fundamentals },
+    { label: "Value (vs risk)", value: 100 - company.valuationRisk, measured: fundamentals },
+    { label: "Balance sheet", value: 100 - company.balanceSheetRisk, measured: fundamentals },
+    { label: "AI exposure", value: company.aiExposure, measured: false },
+  ];
   return (
-    <article className="info-block">
-      <h3>{title}</h3>
-      {lines.map((line, index) => (
-        <p key={index}>{line}</p>
+    <div className="drivers">
+      {drivers.map((d) => (
+        <div className="driver" key={d.label}>
+          <span className="driver-label">
+            {d.label} <em>{d.measured ? "measured" : "editorial"}</em>
+          </span>
+          <div className="driver-track">
+            <div className={`driver-fill ${d.measured ? "m" : "e"}`} style={{ width: `${Math.max(0, Math.min(100, d.value))}%` }} />
+          </div>
+          <span className="driver-val">{Math.round(d.value)}</span>
+        </div>
       ))}
-    </article>
+    </div>
   );
 }
 
-function PositionStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+function RangeBar({ low, high, price, currency }: { low: number; high: number; price: number; currency: string }) {
+  const pos = high > low ? Math.max(0, Math.min(100, ((price - low) / (high - low)) * 100)) : 50;
   return (
-    <div className="position-stat">
+    <div className="range">
+      <span className="range-end">{formatPrice(low)}</span>
+      <div className="range-track">
+        <div className="range-marker" style={{ left: `${pos}%` }}>
+          <span className="range-price">{formatPrice(price)} {currency}</span>
+        </div>
+      </div>
+      <span className="range-end">{formatPrice(high)}</span>
+    </div>
+  );
+}
+
+function ScoreRing({ score, action, large }: { score: number; action: Recommendation["action"]; large?: boolean }) {
+  const r = 20;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - Math.max(0, Math.min(100, score)) / 100);
+  return (
+    <svg className={`ring ${large ? "ring-lg" : ""}`} viewBox="0 0 48 48" aria-hidden="true">
+      <circle className="ring-track" cx="24" cy="24" r={r} />
+      <circle
+        className={`ring-arc ${action}`}
+        cx="24"
+        cy="24"
+        r={r}
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        transform="rotate(-90 24 24)"
+      />
+      <text className="ring-num" x="24" y="24" dominantBaseline="central" textAnchor="middle">
+        {score}
+      </text>
+    </svg>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+  return (
+    <div className="stat">
       <span>{label}</span>
       <strong className={tone ? `tone-${tone}` : undefined}>{value}</strong>
     </div>
@@ -378,6 +519,10 @@ function PositionStat({ label, value, tone }: { label: string; value: string; to
 
 function Action({ action }: { action: Recommendation["action"] }) {
   return <span className={`action ${action}`}>{action}</span>;
+}
+
+function prettyTheme(theme: string): string {
+  return theme.replace(/-/g, " ");
 }
 
 function formatNumber(value: number): string {
@@ -391,7 +536,6 @@ function formatSigned(value: number): string {
 
 function formatSignedPct(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return "—";
-  // Decide the sign from the rounded magnitude so -0.001 never shows "−0.00%".
   const rounded = Number(value.toFixed(2));
   const sign = rounded < 0 ? "−" : rounded > 0 ? "+" : "";
   return `${sign}${Math.abs(rounded).toFixed(2)}%`;
@@ -413,13 +557,18 @@ function formatPrice(value: number): string {
 }
 
 function formatRatio(value: number | undefined): string {
-  // A P/E or P/S of zero or below is not a meaningful multiple (e.g. no earnings).
   if (value === undefined || !Number.isFinite(value) || value <= 0) return "—";
   return `${value.toFixed(1)}×`;
 }
 
 function toPct(fraction: number | undefined): number | undefined {
   return fraction === undefined || !Number.isFinite(fraction) ? undefined : fraction * 100;
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "earlier";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatAsOf(iso: string): string {
