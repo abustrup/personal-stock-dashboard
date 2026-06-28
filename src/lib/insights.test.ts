@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInsights } from "./insights";
+import { buildHoldingContexts, buildInsights } from "./insights";
 import type { Company, Recommendation } from "./types";
 
 const company = (over: Partial<Company> & { symbol: string }): Company => ({
@@ -115,5 +115,60 @@ describe("buildInsights", () => {
     expect(insights.tilt).toBeUndefined();
     expect(insights.topOpportunity).toBeUndefined();
     expect(insights.concentration).toBeUndefined();
+    expect(insights.holdingContexts.size).toBe(0);
+  });
+});
+
+describe("buildHoldingContexts", () => {
+  it("ranks each owned holding by size and by risk within the book", () => {
+    const portfolio = [
+      // Biggest position, but the lowest-risk axes → not the riskiest.
+      rec({ symbol: "BIG", weight: 40, company: { valuationRisk: 30, balanceSheetRisk: 10, geopoliticalRisk: 20 } }),
+      // Mid-size, mid-risk.
+      rec({ symbol: "MID", weight: 35, company: { valuationRisk: 55, balanceSheetRisk: 20, geopoliticalRisk: 40 } }),
+      // Smallest position, but the riskiest book member.
+      rec({ symbol: "SMALL", weight: 25, company: { valuationRisk: 82, balanceSheetRisk: 28, geopoliticalRisk: 60 } }),
+    ];
+
+    const contexts = buildHoldingContexts(portfolio);
+
+    expect(contexts.size).toBe(3);
+    expect(contexts.get("BIG")).toMatchObject({ count: 3, sizeRank: 1, riskRank: 3, weightPct: 40 });
+    expect(contexts.get("MID")).toMatchObject({ sizeRank: 2, riskRank: 2 });
+    // Smallest by weight yet riskiest by axes — the cross-portfolio tension a broker never surfaces.
+    expect(contexts.get("SMALL")).toMatchObject({ sizeRank: 3, riskRank: 1 });
+    expect(contexts.get("SMALL")?.riskFactor).toBe("valuation risk");
+  });
+
+  it("names the dominant risk axis and lets compliance dominate", () => {
+    const portfolio = [
+      rec({ symbol: "GEO", weight: 50, company: { valuationRisk: 30, balanceSheetRisk: 20, geopoliticalRisk: 70 } }),
+      rec({
+        symbol: "BLOCKED",
+        weight: 50,
+        company: { valuationRisk: 30, balanceSheetRisk: 20, geopoliticalRisk: 20 },
+        compliance: { status: "blocked", flags: ["x"], source: "" },
+      }),
+    ];
+
+    const contexts = buildHoldingContexts(portfolio);
+
+    expect(contexts.get("GEO")?.riskFactor).toBe("geopolitical risk");
+    // Compliance block dominates the risk-axis comparison.
+    expect(contexts.get("BLOCKED")?.riskFactor).toBe("EIFO compliance");
+    expect(contexts.get("BLOCKED")?.riskRank).toBe(1);
+  });
+
+  it("excludes non-owned recommendations and handles a single holding", () => {
+    const portfolio = [
+      rec({ symbol: "OWNED", weight: 100 }),
+      rec({ symbol: "WATCH" }), // no holding → not part of the book
+    ];
+
+    const contexts = buildHoldingContexts(portfolio);
+
+    expect(contexts.size).toBe(1);
+    expect(contexts.get("OWNED")).toMatchObject({ count: 1, sizeRank: 1, riskRank: 1 });
+    expect(contexts.has("WATCH")).toBe(false);
   });
 });

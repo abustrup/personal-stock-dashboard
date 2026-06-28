@@ -15,7 +15,7 @@ import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
 import { buildDashboardModel } from "./lib/dashboard";
-import { buildInsights } from "./lib/insights";
+import { buildInsights, RISK_FACTORS, type HoldingContext, type RiskFactor } from "./lib/insights";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
@@ -247,7 +247,12 @@ export default function App() {
           onSelect={open}
         />
       )}
-      {view === "detail" && selected && <CompanyDetail recommendation={selected} />}
+      {view === "detail" && selected && (
+        <CompanyDetail
+          recommendation={selected}
+          context={insights.holdingContexts.get(selected.company.symbol)}
+        />
+      )}
     </main>
   );
 }
@@ -351,7 +356,13 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
   );
 }
 
-function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
+function CompanyDetail({
+  recommendation,
+  context,
+}: {
+  recommendation: Recommendation;
+  context?: HoldingContext;
+}) {
   const { company, compliance, holding } = recommendation;
   const market = company.market;
 
@@ -426,6 +437,21 @@ function CompanyDetail({ recommendation }: { recommendation: Recommendation }) {
               </>
             )}
           </div>
+        </article>
+      )}
+
+      {context && holding && (
+        <article className="card" aria-label="this holding within your portfolio">
+          <h3>In your portfolio</h3>
+          <div className="context-stats">
+            <Stat label="By size" value={sizeLabel(context.sizeRank, context.count)} />
+            <Stat label="By risk" value={riskLabel(context.riskRank, context.count)} />
+          </div>
+          <p className="estimate-note">
+            {context.count > 1
+              ? `Ranked across your ${context.count} holdings — largest risk axis here is ${context.riskFactor} (${riskFactorProvenance(context.riskFactor, Boolean(company.market?.fundamentals))}). A cross-portfolio synthesis your broker doesn't provide.`
+              : `Your only holding — largest risk axis here is ${context.riskFactor} (${riskFactorProvenance(context.riskFactor, Boolean(company.market?.fundamentals))}).`}
+          </p>
         </article>
       )}
 
@@ -527,6 +553,37 @@ function Action({ action }: { action: Recommendation["action"] }) {
 
 function prettyTheme(theme: string): string {
   return theme.replace(/-/g, " ");
+}
+
+function ordinal(n: number): string {
+  const tens = n % 100;
+  const ones = n % 10;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ones === 1 ? "st" : ones === 2 ? "nd" : ones === 3 ? "rd" : "th";
+  return `${n}${suffix}`;
+}
+
+function sizeLabel(rank: number, count: number): string {
+  if (count <= 1) return "Only position";
+  if (rank === 1) return "Largest";
+  if (rank === count) return "Smallest";
+  return `${ordinal(rank)} largest`;
+}
+
+function riskLabel(rank: number, count: number): string {
+  if (count <= 1) return "Only position";
+  if (rank === 1) return "Riskiest";
+  if (rank === count) return "Lowest risk";
+  return `${ordinal(rank)}-riskiest`;
+}
+
+// Provenance of the named risk axis, matching the measured/editorial discipline
+// the rest of the detail view follows. Geopolitical risk is always editorial;
+// compliance is policy-driven; valuation and balance-sheet risk are measured
+// from fundamentals when a refresh has run, otherwise editorial estimates.
+function riskFactorProvenance(riskFactor: RiskFactor, fundamentalsMeasured: boolean): string {
+  if (riskFactor === RISK_FACTORS.compliance) return "policy";
+  if (riskFactor === RISK_FACTORS.geopolitical) return "editorial";
+  return fundamentalsMeasured ? "measured" : "editorial";
 }
 
 function formatNumber(value: number): string {

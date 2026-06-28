@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -22,6 +22,21 @@ describe("App", () => {
     expect(screen.getByText(/Top opportunity/i)).toBeInTheDocument();
     expect(screen.getByText(/Concentration/i)).toBeInTheDocument();
     expect(screen.getByText(/in NVIDIA Corp\./i)).toBeInTheDocument();
+  });
+
+  it("shows where a holding sits within the book when opened", () => {
+    render(<App />);
+
+    // Open the largest position straight from the concentration synthesis card.
+    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+
+    const context = screen.getByLabelText(/this holding within your portfolio/i);
+    expect(within(context).getByText(/in your portfolio/i)).toBeInTheDocument();
+    // NVIDIA is the largest demo position by weight.
+    expect(within(context).getByText(/^Largest$/)).toBeInTheDocument();
+    // Editorial-only load (no fetched fundamentals) → the axis is labelled
+    // editorial, matching the rest of the detail view's provenance discipline.
+    expect(within(context).getByText(/largest risk axis here is valuation risk \(editorial\)/i)).toBeInTheDocument();
   });
 
   it("falls back to an editorial-only label when no snapshot loads", async () => {
