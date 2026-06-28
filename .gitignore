@@ -1,0 +1,20 @@
+node_modules
+dist
+.DS_Store
+coverage
+public/data/live-signals.json
+
+# Personal data — never commit real broker exports or positions.
+# This is a PUBLIC repo; sample/portfolio-sample.csv is fictional demo data only.
+*private*.csv
+*positioner*.csv
+*Positioner*.csv
+/data/
+
+# build artifacts
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
+
+# Claude Code / editor-local tooling
+.claude/
