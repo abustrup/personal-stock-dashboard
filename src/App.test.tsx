@@ -77,6 +77,26 @@ describe("App", () => {
     expect(within(analysis).getAllByText(/^editorial$/i).length).toBeGreaterThan(0);
   });
 
+  it("plots holdings and opportunities on the decision map and opens a name", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Map$/ }));
+
+    // The plane and its quadrant labels render.
+    expect(screen.getByLabelText(/^Decision map$/i)).toBeInTheDocument();
+    expect(screen.getByText(/strong & steady/i)).toBeInTheDocument();
+    expect(screen.getByText(/avoid zone/i)).toBeInTheDocument();
+
+    // Owned holdings are marked as such and carry their book weight in the
+    // accessible label; opportunities are explicitly "not owned".
+    const nvidia = screen.getByRole("button", { name: /NVIDIA Corp.*% of your book/i });
+    expect(screen.getAllByRole("button", { name: /not owned/i }).length).toBeGreaterThan(0);
+
+    // Clicking a marker opens that company's detail view.
+    fireEvent.click(nvidia);
+    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+  });
+
   it("falls back to an editorial-only label when no snapshot loads", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no server")));
     render(<App />);

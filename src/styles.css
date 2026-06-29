@@ -868,6 +868,170 @@ h1 {
   color: var(--muted);
 }
 
+/* ---------- decision map ---------- */
+.map-panel {
+  overflow: hidden;
+}
+
+.map-frame {
+  margin: 4px 0 14px;
+}
+
+.map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.map-plane {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+/* The single tinted region — where you want names to sit (strong & steady). */
+.map-quadrant {
+  fill: var(--accent-soft);
+  opacity: 0.55;
+}
+
+.map-mid {
+  stroke: #ded8cb;
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.map-quad-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.map-axis {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.map-axis-end {
+  fill: var(--muted);
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Action tone — namespaced so it never collides with the action-pill colours. */
+.map-dot.go {
+  color: #1a9466;
+}
+.map-dot.hold {
+  color: #cf9a2a;
+}
+.map-dot.trim {
+  color: #d9772f;
+}
+.map-dot.avoid {
+  color: #cf4150;
+}
+
+.map-dot {
+  cursor: pointer;
+}
+
+.map-mark {
+  transition: r 0.15s ease;
+}
+
+.map-mark.fill {
+  fill: currentColor;
+  stroke: var(--card);
+  stroke-width: 1.5;
+}
+
+.map-mark.hollow {
+  fill: var(--card);
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.map-flag-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-dasharray: 2 2;
+  opacity: 0.8;
+}
+
+.map-mark-label {
+  fill: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.map-dot:hover .map-mark,
+.map-dot:focus-visible .map-mark {
+  r: 17;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.map-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.map-swatch.fill {
+  fill: var(--accent);
+}
+
+.map-swatch.hollow {
+  fill: var(--card);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.map-key-actions {
+  gap: 5px;
+}
+
+.map-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+.map-chip.go {
+  background: #1a9466;
+}
+.map-chip.hold {
+  background: #cf9a2a;
+}
+.map-chip.trim {
+  background: #d9772f;
+}
+.map-chip.avoid {
+  background: #cf4150;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-mark {
+    transition: none;
+  }
+}
+
 /* ---------- focus + responsive ---------- */
 .insight:focus-visible,
 .decision-card:focus-visible,
@@ -876,6 +1040,15 @@ h1 {
 .ghost:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.map-dot:focus {
+  outline: none;
+}
+
+.map-dot:focus-visible .map-mark {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }
 
 @media (max-width: 860px) {
