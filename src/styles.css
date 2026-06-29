@@ -656,6 +656,81 @@ h1 {
   font-size: 0.86rem;
 }
 
+/* ---------- score contribution (diverging) bars ---------- */
+.micro-cap {
+  margin: 0 0 8px !important;
+  font-size: 0.7rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.micro-cap-spaced {
+  margin-top: 14px !important;
+}
+
+.contribs {
+  display: grid;
+  gap: 8px;
+}
+
+.contrib {
+  display: grid;
+  grid-template-columns: 130px 1fr 42px;
+  align-items: center;
+  gap: 10px;
+}
+
+.contrib-label {
+  font-size: 0.82rem;
+  color: #3f433b;
+}
+
+.contrib-label em {
+  display: block;
+  font-style: normal;
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.contrib-track {
+  position: relative;
+  height: 10px;
+}
+
+.contrib-mid {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.contrib-fill {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+}
+
+.contrib-fill.pos {
+  background: linear-gradient(90deg, #2c7e57, #1a9466);
+}
+
+.contrib-fill.neg {
+  background: linear-gradient(90deg, #c34f3f, #b3261e);
+}
+
+.contrib-val {
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 52w range bar ---------- */
 .range {
   display: flex;

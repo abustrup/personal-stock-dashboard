@@ -60,6 +60,23 @@ describe("App", () => {
     expect(within(context).getByText(/largest risk axis here is valuation risk \(editorial\)/i)).toBeInTheDocument();
   });
 
+  it("explains the score by weighted contribution in the detail view", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+
+    const analysis = screen.getByText(/why this score/i).closest("article")!;
+    // The score breakdown caption and the raw input-level caption both appear,
+    // so the two complementary charts are distinguishable.
+    expect(within(analysis).getByText(/weighted pull on the score/i)).toBeInTheDocument();
+    expect(within(analysis).getByText(/input levels/i)).toBeInTheDocument();
+    // At least one factor lifts the score (+) and at least one drags it (−).
+    expect(within(analysis).getAllByText(/^\+\d/).length).toBeGreaterThan(0);
+    expect(within(analysis).getAllByText(/^−\d/).length).toBeGreaterThan(0);
+    // Editorial-only load → AI exposure is labelled editorial, never measured.
+    expect(within(analysis).getAllByText(/^editorial$/i).length).toBeGreaterThan(0);
+  });
+
   it("falls back to an editorial-only label when no snapshot loads", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no server")));
     render(<App />);
