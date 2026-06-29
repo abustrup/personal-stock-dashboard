@@ -112,6 +112,9 @@ export type Company = {
   expertSignal: ExpertSignal;
   /** Live price metrics when a refresh has run; absent means editorial-only. */
   market?: MarketSnapshot;
+  /** True for a name the user typed into their watchlist (not the curated universe).
+   *  Pure metadata — it never changes the score; the model treats it like any name. */
+  userAdded?: boolean;
 };
 
 export type ComplianceStatus = "blocked" | "restricted" | "possible_overlap" | "unknown";

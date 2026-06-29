@@ -1,11 +1,13 @@
 import {
   AlertTriangle,
   Ban,
+  BookmarkPlus,
   BriefcaseBusiness,
   Compass,
   FileUp,
   GitCompareArrows,
   Landmark,
+  Plus,
   Radar,
   RotateCcw,
   ScatterChart,
@@ -15,8 +17,9 @@ import {
   SlidersHorizontal,
   TriangleAlert,
   Wallet,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
@@ -50,6 +53,15 @@ import {
   type InvestabilitySummary,
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
+import {
+  addWatchEntry,
+  loadWatchlist,
+  removeWatchEntry,
+  saveWatchlist,
+  watchlistCompanies,
+  type AddWatchError,
+  type WatchEntry,
+} from "./lib/watchlist";
 import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "map" | "compare" | "detail";
@@ -83,10 +95,29 @@ export default function App() {
   const [dataAsOf, setDataAsOf] = useState<string | undefined>();
   const [brokerSettings, setBrokerSettings] = useState<BrokerSettings>(loadBrokerSettings);
   const [hideOffLimits, setHideOffLimits] = useState(false);
+  const [watchlist, setWatchlist] = useState<WatchEntry[]>(loadWatchlist);
 
   function updateBrokerSettings(next: BrokerSettings) {
     setBrokerSettings(next);
     saveBrokerSettings(next);
+  }
+
+  // Add a name the user typed. Returns an error code on rejection so the form can
+  // explain exactly what to fix; on success the new list is persisted in-browser.
+  function addToWatchlist(input: { name: string; symbol: string; exchange?: string }): AddWatchError | undefined {
+    const universeSymbols = new Set(universe.map((company) => company.symbol));
+    const ownedSymbols = new Set(holdings.map((holding) => holding.symbol));
+    const result = addWatchEntry(watchlist, input, new Date().toISOString(), universeSymbols, ownedSymbols);
+    if (!result.ok) return result.error;
+    setWatchlist(result.list);
+    saveWatchlist(result.list);
+    return undefined;
+  }
+
+  function removeFromWatchlist(symbol: string) {
+    const next = removeWatchEntry(watchlist, symbol);
+    setWatchlist(next);
+    saveWatchlist(next);
   }
 
   useEffect(() => {
@@ -119,9 +150,19 @@ export default function App() {
     [externalSignals, marketSnapshots],
   );
   const hasLiveMarket = Object.keys(marketSnapshots).length > 0;
+  // User-added names run through the SAME enrichment path as the curated universe:
+  // a refresh that wrote their symbol replaces the neutral placeholders with
+  // measured momentum and fundamentals, so they're scored on real data when present.
+  const enrichedWatchlist = useMemo(
+    () =>
+      watchlistCompanies(watchlist).map((company) =>
+        mergeMarketSnapshot(mergeExternalSignals(company, externalSignals), marketSnapshots),
+      ),
+    [watchlist, externalSignals, marketSnapshots],
+  );
   const model = useMemo(
-    () => buildDashboardModel(holdings, enrichedUniverse, complianceOverrides),
-    [holdings, enrichedUniverse],
+    () => buildDashboardModel(holdings, enrichedUniverse, complianceOverrides, enrichedWatchlist),
+    [holdings, enrichedUniverse, enrichedWatchlist],
   );
   const insights = useMemo(() => buildInsights(model.portfolio, model.opportunities), [model]);
 
@@ -360,6 +401,10 @@ export default function App() {
           investabilityFor={investabilityFor}
           hideOffLimits={hideOffLimits}
           onToggleOffLimits={setHideOffLimits}
+          watchlist={watchlist}
+          markets={knownMarkets}
+          onAddWatch={addToWatchlist}
+          onRemoveWatch={removeFromWatchlist}
           onSelect={open}
         />
       )}
@@ -423,6 +468,18 @@ function InsightCard({
       <strong className="insight-value">{value}</strong>
       <span className="insight-detail">{detail}</span>
     </button>
+  );
+}
+
+// Marks a name the user typed in themselves, so a watchlist idea is never mistaken
+// for a curated, researched one — in the accent green (it's yours), distinct from
+// the slate investability gates and the warm-red EIFO flags.
+function WatchBadge() {
+  return (
+    <span className="watch-added" title="You added this name — scored by the model, not yet researched.">
+      <BookmarkPlus aria-hidden="true" size={12} />
+      Added by you
+    </span>
   );
 }
 
@@ -624,6 +681,7 @@ function DecisionCard({
           <span className="dc-conviction">
             {item.conviction} · {item.measured ? "data-backed" : "editorial"}
           </span>
+          {company.userAdded && <WatchBadge />}
           {compliance.status !== "unknown" && (
             <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
           )}
@@ -668,6 +726,10 @@ function OpportunitiesOverview({
   investabilityFor,
   hideOffLimits,
   onToggleOffLimits,
+  watchlist,
+  markets,
+  onAddWatch,
+  onRemoveWatch,
   onSelect,
 }: {
   overview: OpportunityOverview;
@@ -676,11 +738,19 @@ function OpportunitiesOverview({
   investabilityFor: (company: Company) => Investability;
   hideOffLimits: boolean;
   onToggleOffLimits: (next: boolean) => void;
+  watchlist: WatchEntry[];
+  markets: string[];
+  onAddWatch: (input: { name: string; symbol: string; exchange?: string }) => AddWatchError | undefined;
+  onRemoveWatch: (symbol: string) => void;
   onSelect: (symbol: string) => void;
 }) {
   const { standout, standoutExposure, groups, total, gapCount, themeCount, standoutSkipped } = overview;
   const gapThemeCount = groups.filter((g) => g.isGap).length;
   const offLimitsTotal = summary.offPlatform + summary.aboveBudget;
+
+  const watchBar = (
+    <WatchlistBar watchlist={watchlist} markets={markets} onAdd={onAddWatch} onRemove={onRemoveWatch} />
+  );
 
   if (total === 0) {
     const hiddenByFilter = hideOffLimits && offLimitsTotal > 0;
@@ -692,6 +762,7 @@ function OpportunitiesOverview({
             <span>Names you don&apos;t own — and where your book has no exposure yet</span>
           </div>
         </div>
+        {watchBar}
         {hiddenByFilter ? (
           <p className="empty">
             Every idea is off-limits for your account right now — {offLimitsTotal} hidden.{" "}
@@ -716,6 +787,8 @@ function OpportunitiesOverview({
         </div>
         <span className="count">{total}</span>
       </div>
+
+      {watchBar}
 
       {standout && (
         <StandoutIdea
@@ -792,6 +865,137 @@ function OpportunitiesOverview({
   );
 }
 
+// Where you put YOUR own ideas through the same unbiased model. A typed name joins
+// the opportunity set scored on neutral placeholders — deliberately middling and
+// flagged provisional — until a refresh fetches its real momentum and fundamentals.
+// The differentiator a broker can't offer: it shows a name's price, never how that
+// name scores against your personal risk model, your EIFO rules and your budget.
+const ADD_WATCH_MESSAGES: Record<AddWatchError, string> = {
+  missing_name: "Add the company's name.",
+  missing_symbol: "Add a ticker symbol — it's the key to live data.",
+  duplicate: "That symbol is already on your watchlist.",
+  in_universe: "That name is already in the curated set below.",
+  owned: "You already own that — it's in your portfolio, not an opportunity.",
+};
+
+function WatchlistBar({
+  watchlist,
+  markets,
+  onAdd,
+  onRemove,
+}: {
+  watchlist: WatchEntry[];
+  markets: string[];
+  onAdd: (input: { name: string; symbol: string; exchange?: string }) => AddWatchError | undefined;
+  onRemove: (symbol: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
+  const [exchange, setExchange] = useState("");
+  const [error, setError] = useState<AddWatchError | undefined>();
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const err = onAdd({ name, symbol, exchange: exchange || undefined });
+    if (err) {
+      setError(err);
+      return;
+    }
+    setName("");
+    setSymbol("");
+    setExchange("");
+    setError(undefined);
+  }
+
+  return (
+    <section className="watch-bar" aria-label="Add a name to watch">
+      <div className="watch-bar-intro">
+        <span className="watch-bar-icon">
+          <BookmarkPlus aria-hidden="true" size={15} />
+        </span>
+        <div>
+          <strong>Watch your own ideas</strong>
+          <span>
+            Score a name that isn&apos;t in the set — the same model, your EIFO rules and budget. It starts neutral
+            until you refresh its market data.
+          </span>
+        </div>
+      </div>
+
+      <form className="watch-form" onSubmit={submit}>
+        <label className="watch-field watch-field-name">
+          <span>Company</span>
+          <input
+            type="text"
+            value={name}
+            placeholder="e.g. Tesla"
+            onChange={(event) => setName(event.target.value)}
+            aria-label="Company name"
+          />
+        </label>
+        <label className="watch-field watch-field-sym">
+          <span>Ticker</span>
+          <input
+            type="text"
+            value={symbol}
+            placeholder="TSLA"
+            onChange={(event) => setSymbol(event.target.value)}
+            aria-label="Ticker symbol"
+            autoCapitalize="characters"
+            spellCheck={false}
+          />
+        </label>
+        <label className="watch-field watch-field-exch">
+          <span>Market</span>
+          <select value={exchange} onChange={(event) => setExchange(event.target.value)} aria-label="Listing market">
+            <option value="">Not sure</option>
+            {markets.map((market) => (
+              <option key={market} value={market}>
+                {market}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="watch-add">
+          <Plus aria-hidden="true" size={15} />
+          <span>Add</span>
+        </button>
+      </form>
+
+      {error && (
+        <p className="watch-error" role="alert">
+          {ADD_WATCH_MESSAGES[error]}
+        </p>
+      )}
+
+      {watchlist.length > 0 ? (
+        <div className="watch-chips" aria-label="Your watched names">
+          {watchlist.map((entry) => (
+            <span key={entry.symbol} className="watch-chip">
+              <strong>{entry.symbol}</strong>
+              <span className="watch-chip-name">{entry.name}</span>
+              <button
+                type="button"
+                className="watch-chip-remove"
+                aria-label={`Remove ${entry.name} from your watchlist`}
+                onClick={() => onRemove(entry.symbol)}
+              >
+                <X aria-hidden="true" size={13} />
+              </button>
+            </span>
+          ))}
+          <span className="watch-hint">
+            Run <code>npm run refresh -- {watchlist.map((entry) => entry.symbol).join(" ")}</code> to score these on
+            live momentum &amp; fundamentals.
+          </span>
+        </div>
+      ) : (
+        <p className="watch-empty">Nothing watched yet. Add a ticker and it appears below, scored like any other name.</p>
+      )}
+    </section>
+  );
+}
+
 // The featured idea: the single best name you don't own, framed with whether it
 // opens new ground (a theme you hold nothing in) or doubles down on an existing
 // tilt — the portfolio-aware context a broker's "top movers" list never carries.
@@ -824,6 +1028,7 @@ function StandoutIdea({
           <span className="opp-hero-conv">
             {rec.conviction} conviction · {rec.measured ? "data-backed" : "editorial"}
           </span>
+          {company.userAdded && <WatchBadge />}
           {rec.compliance.status !== "unknown" && (
             <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
           )}

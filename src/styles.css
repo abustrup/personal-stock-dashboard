@@ -2036,6 +2036,206 @@ h1 {
   line-height: 1.4;
 }
 
+/* ---------- watchlist: your own ideas in the model ---------- */
+/* A distinct "your input" zone: a faint accent wash and ring set it apart from the
+   curated cards below, signalling this is where you add names rather than read them. */
+.watch-bar {
+  margin: 0 0 18px;
+  padding: 15px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--card) 64%);
+  box-shadow: var(--shadow);
+}
+.watch-bar-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.watch-bar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  flex: none;
+}
+.watch-bar-intro strong {
+  display: block;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+.watch-bar-intro > div > span {
+  display: block;
+  margin-top: 2px;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.watch-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 9px;
+  margin-top: 13px;
+}
+.watch-field {
+  display: grid;
+  gap: 5px;
+}
+.watch-field > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.watch-field-name {
+  flex: 1 1 200px;
+}
+.watch-field-sym {
+  flex: 0 1 120px;
+}
+.watch-field-exch {
+  flex: 1 1 180px;
+}
+.watch-field input,
+.watch-field select {
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 0.95rem;
+  outline: none;
+}
+.watch-field-sym input {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.watch-field input:focus,
+.watch-field select:focus {
+  border-color: var(--accent);
+}
+.watch-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 17px;
+  border: none;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.watch-add:hover {
+  filter: brightness(1.12);
+}
+.watch-error {
+  margin: 10px 0 0;
+  color: var(--down);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.watch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.82rem;
+}
+.watch-chip strong {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.watch-chip-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.watch-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.watch-chip-remove:hover {
+  background: #f1eee7;
+  color: var(--down);
+}
+.watch-hint {
+  flex: 1 1 100%;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.watch-hint code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #efece4;
+  font-size: 0.92em;
+  word-break: break-word;
+}
+.watch-empty {
+  margin: 13px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* The "Added by you" badge — accent green (it's yours), set apart from the slate
+   investability gates and the warm EIFO flags. */
+.watch-added {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.watch-added svg {
+  opacity: 0.9;
+}
+
 /* ---------- detail-view investability strip ---------- */
 .investability {
   display: flex;
