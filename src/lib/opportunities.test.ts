@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOpportunityOverview } from "./opportunities";
+import { buildOpportunityOverview, pickActionableStandout, themeExposure } from "./opportunities";
 import type { Company, Recommendation } from "./types";
 
 const company = (over: Partial<Company> & { symbol: string }): Company => ({
@@ -155,5 +155,79 @@ describe("buildOpportunityOverview", () => {
     expect(result.gapCount).toBe(0);
     expect(result.standout).toBeUndefined();
     expect(result.standoutExposure).toBeUndefined();
+  });
+});
+
+describe("pickActionableStandout", () => {
+  it("leads with the top non-avoid idea when no investability gate is supplied", () => {
+    const opportunities = [
+      rec({ symbol: "AVOID", action: "avoid", score: 99 }),
+      rec({ symbol: "TOP", action: "investigate", score: 88 }),
+      rec({ symbol: "NEXT", action: "watch", score: 70 }),
+    ];
+    const { standout, standoutSkipped } = pickActionableStandout(opportunities);
+    expect(standout?.company.symbol).toBe("TOP");
+    expect(standoutSkipped).toBe(0);
+  });
+
+  it("skips higher-scoring off-limits names and counts how many were passed", () => {
+    const opportunities = [
+      rec({ symbol: "OFF1", action: "investigate", score: 95 }),
+      rec({ symbol: "OFF2", action: "investigate", score: 90 }),
+      rec({ symbol: "BUYABLE", action: "investigate", score: 82 }),
+    ];
+    const { standout, standoutSkipped } = pickActionableStandout(opportunities, new Set(["BUYABLE"]));
+    expect(standout?.company.symbol).toBe("BUYABLE");
+    expect(standoutSkipped).toBe(2);
+  });
+
+  it("keeps the top idea and reports zero skipped when it is itself investable", () => {
+    const opportunities = [
+      rec({ symbol: "TOP", action: "investigate", score: 95 }),
+      rec({ symbol: "NEXT", action: "investigate", score: 80 }),
+    ];
+    const { standout, standoutSkipped } = pickActionableStandout(opportunities, new Set(["TOP", "NEXT"]));
+    expect(standout?.company.symbol).toBe("TOP");
+    expect(standoutSkipped).toBe(0);
+  });
+
+  it("falls back to the best idea when none is investable, without a phantom skip count", () => {
+    const opportunities = [
+      rec({ symbol: "OFF1", action: "investigate", score: 95 }),
+      rec({ symbol: "OFF2", action: "investigate", score: 80 }),
+    ];
+    const { standout, standoutSkipped } = pickActionableStandout(opportunities, new Set());
+    expect(standout?.company.symbol).toBe("OFF1");
+    expect(standoutSkipped).toBe(0);
+  });
+
+  it("returns no standout when every idea is an avoid", () => {
+    const opportunities = [rec({ symbol: "A", action: "avoid", score: 90 }), rec({ symbol: "B", action: "avoid", score: 80 })];
+    const { standout, standoutSkipped } = pickActionableStandout(opportunities, new Set(["A", "B"]));
+    expect(standout).toBeUndefined();
+    expect(standoutSkipped).toBe(0);
+  });
+});
+
+describe("themeExposure", () => {
+  it("sums owned holdings and weight for a theme, ignoring non-owned ideas", () => {
+    const portfolio = [
+      rec({ symbol: "OWN1", weight: 14, company: { themes: ["ai-platform", "cloud"] } }),
+      rec({ symbol: "OWN2", weight: 10, company: { themes: ["ai-platform"] } }),
+      rec({ symbol: "IDEA", company: { themes: ["ai-platform"] } }), // no weight → not a holding
+    ];
+    const exposure = themeExposure(portfolio, "ai-platform");
+    expect(exposure.ownedCount).toBe(2);
+    expect(exposure.ownedWeightPct).toBeCloseTo(24);
+    expect(exposure.isGap).toBe(false);
+    expect(exposure.theme).toBe("ai-platform");
+  });
+
+  it("reports a gap for a theme you hold nothing in", () => {
+    const portfolio = [rec({ symbol: "OWN", weight: 20, company: { themes: ["ai-platform"] } })];
+    const exposure = themeExposure(portfolio, "space");
+    expect(exposure.isGap).toBe(true);
+    expect(exposure.ownedCount).toBe(0);
+    expect(exposure.ownedWeightPct).toBe(0);
   });
 });

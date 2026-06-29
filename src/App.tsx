@@ -30,7 +30,14 @@ import {
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { buildComparison, type Comparison, type Side } from "./lib/compare";
-import { buildOpportunityOverview, type OpportunityGroup, type OpportunityOverview } from "./lib/opportunities";
+import {
+  buildOpportunityOverview,
+  pickActionableStandout,
+  themeExposure,
+  type OpportunityGroup,
+  type OpportunityOverview,
+  type StandoutExposure,
+} from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
@@ -60,6 +67,19 @@ import {
 import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "map" | "compare" | "detail";
+
+// The front-page lead idea: the best opportunity the user can actually act on,
+// resolved once at the top so the portfolio rail and the decision-map highlight
+// agree. Carries the buy plan and theme fit so the rail card can show not just
+// what to buy but how much, and the honest skip note when stronger ideas are
+// off-limits.
+type NextBuy = {
+  rec: Recommendation;
+  skipped: number;
+  investability: Investability;
+  exposure?: StandoutExposure;
+  plan?: PositionPlan;
+};
 
 const tabs: Array<{ id: View; label: string }> = [
   { id: "portfolio", label: "Portfolio" },
@@ -199,6 +219,11 @@ export default function App() {
   // Investability: which opportunities the user can actually act on through their
   // broker and within their per-trade budget. Computed from the same model the
   // rest of the dashboard uses, so the badges, counts and standout never disagree.
+  // The cache is keyed by symbol, so it MUST be rebuilt whenever the inputs to the
+  // assessment change — both the broker settings and the market snapshots, since
+  // affordability reads each company's price. Omitting marketSnapshots here would
+  // freeze the first (pre-fetch) "no price yet" verdict in place, so a refresh's
+  // prices would never reach the budget gate or the buy plan.
   const investabilityFor = useMemo(() => {
     const cache = new Map<string, Investability>();
     return (company: Company): Investability => {
@@ -208,7 +233,7 @@ export default function App() {
       cache.set(company.symbol, inv);
       return inv;
     };
-  }, [brokerSettings]);
+  }, [brokerSettings, marketSnapshots]);
   const oppInvestableSet = useMemo(
     () => investableSymbols(model.opportunities, brokerSettings),
     [model.opportunities, brokerSettings],
@@ -225,6 +250,21 @@ export default function App() {
     () => buildOpportunityOverview(model.portfolio, visibleOpportunities, oppInvestableSet),
     [model.portfolio, visibleOpportunities, oppInvestableSet],
   );
+  // The single idea the dashboard leads with on the front page and the map: the
+  // best name you don't own that you can actually act on — investability-gated, so
+  // it's never a stock off your broker's markets or one a single share overshoots
+  // your budget for. Built from the full opportunity set (independent of the
+  // Opportunities view's hide-off-limits toggle) and carries its buy plan + theme
+  // fit so the rail can show how much to buy, not just what.
+  const nextBuy = useMemo<NextBuy | undefined>(() => {
+    const { standout, standoutSkipped } = pickActionableStandout(model.opportunities, oppInvestableSet);
+    if (!standout) return undefined;
+    const investability = investabilityFor(standout.company);
+    const theme = standout.company.themes[0];
+    const exposure = theme ? themeExposure(model.portfolio, theme) : undefined;
+    const plan = planPosition(investability, model.totalMarketValueDkk);
+    return { rec: standout, skipped: standoutSkipped, investability, exposure, plan };
+  }, [model.opportunities, model.portfolio, model.totalMarketValueDkk, oppInvestableSet, investabilityFor]);
   // Markets present in the curated universe — the toggle set the user picks from.
   // Drop editorial placeholders that aren't real public venues (private/pre-IPO
   // proxies, unknown imports) so the control only lists markets a broker can map to.
@@ -299,7 +339,9 @@ export default function App() {
     opportunities: model.opportunities.length,
     map: model.portfolio.length + Math.min(model.opportunities.length, MAP_OPPORTUNITY_LIMIT),
   };
-  const topOpportunitySymbol = insights.topOpportunity?.company.symbol;
+  // The same actionable pick anchors the decision-map highlight, so "top
+  // opportunity" means one thing across the dashboard — the best idea you can buy.
+  const topOpportunitySymbol = nextBuy?.rec.company.symbol;
 
   return (
     <main className="shell">
@@ -366,7 +408,7 @@ export default function App() {
 
       <div className="view" key={view}>
         {view === "portfolio" && (
-          <PortfolioView portfolio={model.portfolio} insights={insights} onSelect={open} />
+          <PortfolioView portfolio={model.portfolio} insights={insights} nextBuy={nextBuy} onSelect={open} />
         )}
         {view === "opportunities" && (
           <OpportunitiesOverview
@@ -524,13 +566,15 @@ function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number })
 function PortfolioView({
   portfolio,
   insights,
+  nextBuy,
   onSelect,
 }: {
   portfolio: Recommendation[];
   insights: ReturnType<typeof buildInsights>;
+  nextBuy?: NextBuy;
   onSelect: (symbol: string) => void;
 }) {
-  const { needsAttention, concentration, compliance, tilt, topOpportunity } = insights;
+  const { needsAttention, concentration, compliance, tilt } = insights;
   // Roll the owned book up into a primary-theme partition — what the money is actually
   // betting on, counted once per holding. The full-width band below the ledger.
   const composition = useMemo(() => buildBookComposition(portfolio), [portfolio]);
@@ -571,16 +615,7 @@ function PortfolioView({
       <aside className="rail" aria-label="What Saxo won't say">
         <h2>What Saxo won&apos;t say</h2>
 
-        {topOpportunity && (
-          <button type="button" className="rail-top" onClick={() => onSelect(topOpportunity.company.symbol)}>
-            <div className="rail-top-eyebrow">↗ Top opportunity</div>
-            <div className="rail-top-name">{topOpportunity.company.name}</div>
-            <div className="rail-top-meta">
-              SCORE {topOpportunity.score} · {topOpportunity.action.toUpperCase()} · NOT OWNED
-            </div>
-            <div className="rail-top-why">{topOpportunity.headline}</div>
-          </button>
-        )}
+        {nextBuy && <RailNextBuy nextBuy={nextBuy} onSelect={onSelect} />}
 
         <RailBrief
           eyebrow="Needs attention"
@@ -821,6 +856,69 @@ function RailBrief({
       <div className={`rail-brief-eyebrow ${tone}`}>{eyebrow}</div>
       <div className="rail-brief-headline">{headline}</div>
       <div className="rail-brief-note">{note}</div>
+    </button>
+  );
+}
+
+// The front-page lead idea, made trustworthy: the best opportunity you can ACT ON.
+// The old "top opportunity" link headlined the highest-scoring name even when it was
+// off your broker's markets or a single share already blew your budget — exactly the
+// trap the owner asked to avoid. This card leads with the strongest *investable* idea
+// instead, carries its buy plan (how many whole shares your slot buys) and an honest
+// note when stronger ideas were skipped for being off-limits. The pick and its skip
+// count come from the same tested picker the Opportunities standout uses, so the
+// dashboard leads with one consistent idea everywhere. Falls back to showing the top
+// idea behind a clear off-limits gate when nothing is investable — never silently.
+function RailNextBuy({ nextBuy, onSelect }: { nextBuy: NextBuy; onSelect: (symbol: string) => void }) {
+  const { rec, skipped, investability, exposure, plan } = nextBuy;
+  const { company } = rec;
+  const offLimits = investability.status !== "ok" && investability.status !== "unknown";
+  const ofBook = plan ? bookPctLabel(plan.bookFraction) : undefined;
+  return (
+    <button
+      type="button"
+      className={`rail-top${offLimits ? " off-limits" : ""}`}
+      onClick={() => onSelect(company.symbol)}
+      aria-label={`${
+        offLimits ? "Top idea, off-limits for your account" : "Top opportunity you can act on"
+      }: ${company.name}, score ${rec.score}, ${rec.action} — open detail`}
+    >
+      <div className="rail-top-eyebrow">
+        {offLimits ? "↗ Top idea · off-limits for your account" : "↗ Top opportunity · one you can act on"}
+      </div>
+      <div className="rail-top-name">{company.name}</div>
+      <div className="rail-top-meta">
+        SCORE {rec.score} · {rec.action.toUpperCase()} · NOT OWNED
+      </div>
+      {(company.userAdded || rec.compliance.status !== "unknown") && (
+        <div className="rail-top-badges">
+          {company.userAdded && <WatchBadge />}
+          {rec.compliance.status !== "unknown" && (
+            <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
+          )}
+        </div>
+      )}
+      <div className="rail-top-why">{rec.headline}</div>
+      <div className="rail-top-fit">{standoutFit(exposure)}</div>
+      {offLimits ? (
+        <div className="rail-top-gate">
+          <InvestabilityBadge investability={investability} />
+        </div>
+      ) : plan ? (
+        <div className="rail-top-plan">
+          <Wallet aria-hidden="true" size={12} />
+          <span>
+            {planHeadline(plan)}
+            {ofBook ? ` · ~${ofBook} of your book` : ""}
+          </span>
+        </div>
+      ) : null}
+      {skipped > 0 && (
+        <div className="rail-top-skip">
+          {skipped} higher-scoring {skipped === 1 ? "idea is" : "ideas are"} off-limits for your account — this is the
+          strongest you can act on.
+        </div>
+      )}
     </button>
   );
 }
