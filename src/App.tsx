@@ -28,6 +28,7 @@ import {
   type PlaneDims,
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
+import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
@@ -100,6 +101,10 @@ export default function App() {
     model.all.find((recommendation) => recommendation.company.symbol === selectedSymbol) ??
     model.topIdea ??
     model.portfolio[0];
+  const peerComparison = useMemo(
+    () => (selected ? buildPeerComparison(model.all, selected.company.symbol) : undefined),
+    [model.all, selected?.company.symbol],
+  );
 
   function open(symbol: string | undefined) {
     if (!symbol) return;
@@ -277,6 +282,8 @@ export default function App() {
         <CompanyDetail
           recommendation={selected}
           context={insights.holdingContexts.get(selected.company.symbol)}
+          peers={peerComparison}
+          onSelect={open}
         />
       )}
     </main>
@@ -585,9 +592,13 @@ function mapTone(action: Recommendation["action"]): string {
 function CompanyDetail({
   recommendation,
   context,
+  peers,
+  onSelect,
 }: {
   recommendation: Recommendation;
   context?: HoldingContext;
+  peers?: PeerComparison;
+  onSelect: (symbol: string) => void;
 }) {
   const { company, compliance, holding } = recommendation;
   const market = company.market;
@@ -675,6 +686,8 @@ function CompanyDetail({
         </article>
       )}
 
+      {peers && peers.count > 1 && <ThemePeers comparison={peers} onSelect={onSelect} />}
+
       {context && holding && (
         <article className="card" aria-label="this holding within your portfolio">
           <h3>In your portfolio</h3>
@@ -705,6 +718,83 @@ function CompanyDetail({
       )}
     </section>
   );
+}
+
+// The theme-peer ladder: where this name ranks among the universe companies doing
+// the same thing, by the model's own score. Ownership reuses the decision map's
+// vocabulary (filled marker = you own it, hollow ring = an opportunity) so the two
+// charts speak the same language; the bar colour reuses the action palette. The
+// point a broker can't give: it calls out the higher-scoring names you do NOT own.
+function ThemePeers({
+  comparison,
+  onSelect,
+}: {
+  comparison: PeerComparison;
+  onSelect: (symbol: string) => void;
+}) {
+  const { theme, peers, rank, count, higherUnowned } = comparison;
+  return (
+    <article className="card peers-card" aria-label={`theme peers in ${prettyTheme(theme)}`}>
+      <div className="peers-head">
+        <h3>Theme peers</h3>
+        <span className="peers-theme">{prettyTheme(theme)}</span>
+      </div>
+      <p className="micro-cap peers-rank">
+        Ranks {ordinal(rank)} of {count} by model score
+      </p>
+      <ol className="peer-ladder">
+        {peers.map((peer) => {
+          const flagged = peer.compliance !== "unknown";
+          const label = `${peer.name}: score ${peer.score}, ${peer.action}, ${
+            peer.owned ? "you own it" : "you don't own it"
+          }${flagged ? `, EIFO ${peer.compliance.replace("_", " ")}` : ""}`;
+          return (
+            <li key={peer.symbol}>
+              <button
+                type="button"
+                className={`peer-row ${peer.selected ? "is-selected" : ""}`}
+                onClick={() => onSelect(peer.symbol)}
+                aria-current={peer.selected ? "true" : undefined}
+                aria-label={label}
+              >
+                <span
+                  className={`peer-marker ${peer.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}`}
+                  aria-hidden="true"
+                />
+                <span className="peer-name">
+                  <span className="peer-name-text">{peer.name}</span>
+                  {peer.selected && <em className="peer-here">this name</em>}
+                  {!peer.owned && <span className="peer-tag">opportunity</span>}
+                </span>
+                <span className="peer-track" aria-hidden="true">
+                  <span
+                    className={`peer-fill ${mapTone(peer.action)}`}
+                    style={{ width: `${Math.max(0, Math.min(100, peer.score))}%` }}
+                  />
+                </span>
+                <span className="peer-score">{peer.score}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="estimate-note">
+        {peerSynthesis(rank, theme, higherUnowned.map((p) => p.name))} Filled marker = you own it; hollow ring = an
+        opportunity. A dashed ring marks an EIFO compliance flag. Ranked by the model&apos;s score — not your broker&apos;s.
+      </p>
+    </article>
+  );
+}
+
+// The one-line synthesis above the legend. Honest about ownership in every case:
+// either the named higher-scoring opportunities, or why there are none.
+function peerSynthesis(rank: number, theme: string, higherUnowned: string[]): string {
+  if (higherUnowned.length > 0) {
+    const names = higherUnowned.join(", ");
+    return `${higherUnowned.length} ${higherUnowned.length === 1 ? "name" : "names"} you don't own score higher: ${names}.`;
+  }
+  if (rank === 1) return `Tops its ${prettyTheme(theme)} peers on the model's score.`;
+  return `No name you don't own scores higher in ${prettyTheme(theme)}.`;
 }
 
 // Explains the model's central score by the signed, weighted pull of each input
