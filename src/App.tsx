@@ -30,6 +30,7 @@ import {
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
+import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline";
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
@@ -668,8 +669,13 @@ function CompanyDetail({
       {market && (
         <article className="card market-card">
           <h3>Market context</h3>
-          {market.fiftyTwoWeekLow !== undefined && market.fiftyTwoWeekHigh !== undefined && (
-            <RangeBar low={market.fiftyTwoWeekLow} high={market.fiftyTwoWeekHigh} price={market.price} currency={market.currency} />
+          {market.history && market.history.length > 1 ? (
+            <PricePath market={market} />
+          ) : (
+            market.fiftyTwoWeekLow !== undefined &&
+            market.fiftyTwoWeekHigh !== undefined && (
+              <RangeBar low={market.fiftyTwoWeekLow} high={market.fiftyTwoWeekHigh} price={market.price} currency={market.currency} />
+            )
           )}
           <div className="context-stats">
             <Stat label="Today" value={formatSignedPct(market.dayChangePct)} tone={toneOf(market.dayChangePct ?? 0)} />
@@ -860,6 +866,103 @@ function DriverBars({ company }: { company: Company }) {
           <span className="driver-val">{Math.round(d.value)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The price-path chart: the trailing-year price line a broker also draws — but
+// annotated with the dashboard's own measured analysis so it says something Saxo's
+// chart doesn't. The 52-week high/low band ties to the range bar's numbers; the
+// ~3M and ~6M anchors mark exactly where the momentum lookback windows begin, so
+// the abstract "Momentum 61/100 · 3M +12%" stats become visually verifiable on the
+// same line. Pure SVG, no chart dependency; the geometry is unit-tested in
+// lib/sparkline.ts (the line IS the measured series momentum is derived from).
+const PRICE_DIMS: ChartDims = { width: 640, height: 156, padX: 12, padTop: 18, padBottom: 26 };
+
+function PricePath({ market }: { market: MarketSnapshot }) {
+  const history = market.history ?? [];
+  const chart = buildPriceChart(history, PRICE_DIMS, {
+    high: market.fiftyTwoWeekHigh,
+    low: market.fiftyTwoWeekLow,
+  });
+  if (!chart) {
+    return market.fiftyTwoWeekLow !== undefined && market.fiftyTwoWeekHigh !== undefined ? (
+      <RangeBar low={market.fiftyTwoWeekLow} high={market.fiftyTwoWeekHigh} price={market.price} currency={market.currency} />
+    ) : null;
+  }
+
+  const { width, height, padX } = PRICE_DIMS;
+  const rising = chart.last.value >= chart.first.value;
+  const hasBand = market.fiftyTwoWeekHigh !== undefined && market.fiftyTwoWeekLow !== undefined;
+  const baselineY = height - PRICE_DIMS.padBottom;
+
+  // Anchor the trailing-return windows on the line. Drawn only when the series is
+  // long enough to place them away from the latest point.
+  const anchors = [
+    { months: 6, label: "6M", ret: market.return6m },
+    { months: 3, label: "3M", ret: market.return3m },
+  ]
+    .map((a) => ({ ...a, point: chart.points[monthsAgoIndex(chart.points.length, a.months)] }))
+    .filter((a) => a.point && a.point.index < chart.points.length - 2);
+
+  const summary = `Price over the past year, ${formatPrice(chart.first.value)} to ${formatPrice(
+    market.price,
+  )} ${market.currency}${hasBand ? `, 52-week range ${formatPrice(market.fiftyTwoWeekLow!)} to ${formatPrice(market.fiftyTwoWeekHigh!)}` : ""}.`;
+
+  return (
+    <div className="pricepath">
+      <svg className="pricepath-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={summary}>
+        <title>{summary}</title>
+        <defs>
+          <linearGradient id="pricepath-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" className={`pp-grad-top ${rising ? "up" : "down"}`} />
+            <stop offset="100%" className="pp-grad-bottom" />
+          </linearGradient>
+        </defs>
+
+        {/* 52-week band: the same high/low the range bar reads, as reference lines. */}
+        {hasBand && (
+          <>
+            <line className="pp-band" x1={padX} y1={chart.yFor(market.fiftyTwoWeekHigh!)} x2={width - padX} y2={chart.yFor(market.fiftyTwoWeekHigh!)} />
+            <line className="pp-band" x1={padX} y1={chart.yFor(market.fiftyTwoWeekLow!)} x2={width - padX} y2={chart.yFor(market.fiftyTwoWeekLow!)} />
+            <text className="pp-band-label" x={width - padX} y={chart.yFor(market.fiftyTwoWeekHigh!) - 4} textAnchor="end">
+              52w high · {formatPrice(market.fiftyTwoWeekHigh!)}
+            </text>
+            <text className="pp-band-label" x={width - padX} y={chart.yFor(market.fiftyTwoWeekLow!) + 12} textAnchor="end">
+              52w low · {formatPrice(market.fiftyTwoWeekLow!)}
+            </text>
+          </>
+        )}
+
+        <path className={`pp-area ${rising ? "up" : "down"}`} d={chart.areaPath} fill="url(#pricepath-fill)" />
+        <path className={`pp-line ${rising ? "up" : "down"}`} d={chart.linePath} />
+
+        {/* Momentum-window anchors: where the 3M / 6M trailing returns are measured from. */}
+        {anchors.map((a) => (
+          <g className="pp-anchor" key={a.label}>
+            <line className="pp-anchor-tick" x1={a.point.x} y1={a.point.y} x2={a.point.x} y2={baselineY} />
+            <circle className="pp-anchor-dot" cx={a.point.x} cy={a.point.y} r={3} />
+            <text className="pp-anchor-label" x={a.point.x} y={baselineY + 13} textAnchor="middle">
+              ~{a.label}
+              {a.ret !== undefined ? ` · ${formatSignedPct(a.ret)}` : ""}
+            </text>
+          </g>
+        ))}
+
+        {/* Latest price. */}
+        <circle className={`pp-now ${rising ? "up" : "down"}`} cx={chart.last.x} cy={chart.last.y} r={4} />
+        <text className={`pp-now-label ${rising ? "up" : "down"}`} x={chart.last.x} y={chart.last.y - 9} textAnchor="end">
+          {formatPrice(market.price)} {market.currency}
+        </text>
+
+        <text className="pp-axis" x={padX} y={height - 6} textAnchor="start">1Y ago</text>
+        <text className="pp-axis" x={width - padX} y={height - 6} textAnchor="end">now</text>
+      </svg>
+      <p className="estimate-note pricepath-note">
+        Measured close prices over the past year — the same series momentum is derived from. The ~3M and ~6M ticks mark
+        roughly where each measured trailing-return window begins; the band is the 52-week range. Annotation your
+        broker&apos;s chart doesn&apos;t draw.
+      </p>
     </div>
   );
 }

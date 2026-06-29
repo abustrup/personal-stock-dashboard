@@ -145,4 +145,43 @@ describe("App", () => {
 
     expect(await screen.findByText(/Live data/i)).toBeInTheDocument();
   });
+
+  it("draws the annotated price-path chart when history is present", async () => {
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: {
+          symbol: "NVDA",
+          price: 197.22,
+          currency: "USD",
+          dayChangePct: -1.6,
+          fiftyTwoWeekHigh: 236.54,
+          fiftyTwoWeekLow: 149.26,
+          return3m: 12.6,
+          return6m: 9,
+          momentum: 61,
+          history: [150, 158, 165, 172, 168, 175, 183, 188, 192, 197.22],
+          asOf: "2026-06-28T18:49:41.386Z",
+        },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+
+    // Wait for the live snapshot to merge, then open NVIDIA's detail view.
+    await screen.findByText(/Live data/i);
+    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+
+    // The chart is exposed as a single labelled image describing the price path
+    // and the 52-week range it is annotated with.
+    const chart = await screen.findByRole("img", { name: /price over the past year/i });
+    expect(chart).toHaveAccessibleName(/52-week range/i);
+    // The momentum-window anchors carry their measured trailing returns, tying the
+    // line to the model's own numbers — the annotation a broker's chart lacks.
+    expect(screen.getByText(/^~3M · \+12\.60%$/)).toBeInTheDocument();
+    expect(screen.getByText(/^~6M · \+9\.00%$/)).toBeInTheDocument();
+    expect(screen.getByText(/the same series momentum is derived from/i)).toBeInTheDocument();
+  });
 });

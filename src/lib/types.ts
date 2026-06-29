@@ -85,6 +85,8 @@ export type MarketSnapshot = {
   rangePosition?: number;
   /** Momentum 0-100 derived from price action (not an editorial estimate). */
   momentum: number;
+  /** Downsampled (≈weekly) closing prices over the trailing year, oldest→newest, for the price-path chart. Measured, same series momentum is derived from. */
+  history?: number[];
   /** Present when fundamentals were fetched; replaces editorial growth/quality/valuation/balance-sheet. */
   fundamentals?: Fundamentals;
   asOf: string;

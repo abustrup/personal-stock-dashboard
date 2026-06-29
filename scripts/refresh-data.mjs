@@ -10,7 +10,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { deriveFundamentalAxes, deriveMarketMetrics } from "../src/lib/market.ts";
+import { downsample } from "../src/lib/sparkline.ts";
 import { universe } from "../src/data/universe.ts";
+
+// Points kept in the stored price-path series. ~52 ≈ weekly over a year: enough
+// to draw a faithful line, small enough to keep live-signals.json compact.
+const HISTORY_POINTS = 52;
 
 const UA = "Mozilla/5.0";
 
@@ -111,6 +116,10 @@ async function fetchYahooMarket(symbol) {
       fiftyTwoWeekHigh: high,
       fiftyTwoWeekLow: low,
       ...metrics,
+      // The same measured series momentum is derived from, downsampled for the
+      // price-path chart. The latest point is forced to the live price so the
+      // line ends exactly where the rest of the card reads.
+      history: withLatest(downsample(closes, HISTORY_POINTS), price),
       asOf: new Date().toISOString(),
     };
   } catch {
@@ -273,6 +282,16 @@ async function fetchFinnhubRecommendation(symbol, apiKey) {
       sources: ["Finnhub Recommendation Trends"],
     };
   }
+}
+
+// Force the series to end on the live price so the chart's last point matches
+// the price shown elsewhere in the card (intraday it can differ from the last
+// daily close). Drops the series if downsampling left too little to draw.
+function withLatest(series, price) {
+  if (series.length < 2) return undefined;
+  const out = series.slice();
+  out[out.length - 1] = price;
+  return out;
 }
 
 function sleep(ms) {

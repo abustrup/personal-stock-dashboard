@@ -938,6 +938,133 @@ h1 {
   color: var(--accent);
 }
 
+/* ---------- price-path chart ---------- */
+.pricepath {
+  margin-bottom: 16px;
+}
+
+.pricepath-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.pp-grad-top {
+  stop-color: var(--accent);
+  stop-opacity: 0.18;
+}
+
+.pp-grad-top.up {
+  stop-color: var(--up);
+  stop-opacity: 0.2;
+}
+
+.pp-grad-top.down {
+  stop-color: var(--down);
+  stop-opacity: 0.16;
+}
+
+.pp-grad-bottom {
+  stop-color: var(--card);
+  stop-opacity: 0;
+}
+
+.pp-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.pp-line.up {
+  stroke: var(--up);
+}
+
+.pp-line.down {
+  stroke: var(--down);
+}
+
+.pp-band {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.pp-band-label {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-anchor-tick {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.28;
+}
+
+.pp-anchor-dot {
+  fill: var(--card);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  opacity: 0.65;
+}
+
+.pp-anchor-label {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-now {
+  fill: var(--accent);
+  stroke: var(--card);
+  stroke-width: 2;
+}
+
+.pp-now.up {
+  fill: var(--up);
+}
+
+.pp-now.down {
+  fill: var(--down);
+}
+
+.pp-now-label {
+  fill: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-now-label.up {
+  fill: var(--up);
+}
+
+.pp-now-label.down {
+  fill: var(--down);
+}
+
+.pp-axis {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pricepath-note {
+  margin-top: 0 !important;
+  border-top: none !important;
+  padding-top: 4px !important;
+}
+
 /* ---------- context + broker strips ---------- */
 .context-stats {
   display: grid;
