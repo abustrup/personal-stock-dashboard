@@ -372,6 +372,169 @@ h1 {
   font-size: 0.74rem;
 }
 
+/* ---------- opportunities overview ---------- */
+.opp-hero {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  border: 1px solid #cdd9d0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #eef4ef, var(--card) 72%);
+  box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.opp-hero:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.opp-hero-body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.opp-hero-eyebrow {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.opp-hero-name {
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
+.opp-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.opp-hero-conv {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: capitalize;
+}
+
+.opp-hero-why {
+  margin: 2px 0 0;
+  color: #54584f;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.opp-hero-fit {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.opp-hero-right {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+  align-self: start;
+}
+
+.opps-summary {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.opps-summary strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.opps-summary strong.opps-summary-gap {
+  color: var(--accent);
+}
+
+.opp-groups {
+  display: grid;
+  gap: 22px;
+}
+
+.opp-group {
+  display: grid;
+  gap: 10px;
+}
+
+.opp-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.opp-theme {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.opp-group.is-gap .opp-theme {
+  color: var(--accent);
+}
+
+.opp-exposure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.opp-exposure-label {
+  font-size: 0.74rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.opp-group.is-gap .opp-exposure-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.opp-meter {
+  position: relative;
+  width: 96px;
+  height: 7px;
+  border-radius: 999px;
+  background: #ece7db;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.opp-group.is-gap .opp-meter {
+  background: transparent;
+  border: 1px dashed #b6c6bb;
+}
+
+.opp-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2c7e57, var(--accent));
+}
+
 /* ---------- score ring ---------- */
 .ring {
   width: 48px;
@@ -1596,7 +1759,8 @@ h1 {
 .ghost:focus-visible,
 .cmp-card:focus-visible,
 .cmp-swap:focus-visible,
-.cmp-picker select:focus-visible {
+.cmp-picker select:focus-visible,
+.opp-hero:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1647,6 +1811,20 @@ h1 {
     grid-column: 2;
     justify-items: start;
     text-align: left;
+  }
+  .opp-hero {
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+  }
+  .opp-hero-right {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
+  }
+  .opp-group-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
   .driver {
     grid-template-columns: 110px 1fr 26px;

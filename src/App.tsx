@@ -30,6 +30,7 @@ import {
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { buildComparison, type Comparison, type Side } from "./lib/compare";
+import { buildOpportunityOverview, type OpportunityGroup, type OpportunityOverview } from "./lib/opportunities";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline";
@@ -103,6 +104,10 @@ export default function App() {
     [holdings, enrichedUniverse],
   );
   const insights = useMemo(() => buildInsights(model.portfolio, model.opportunities), [model]);
+  const opportunityOverview = useMemo(
+    () => buildOpportunityOverview(model.portfolio, model.opportunities),
+    [model],
+  );
   const selected =
     model.all.find((recommendation) => recommendation.company.symbol === selectedSymbol) ??
     model.topIdea ??
@@ -283,12 +288,7 @@ export default function App() {
         <DecisionList title="Your holdings" subtitle="Ranked by what to do next" items={model.portfolio} onSelect={open} />
       )}
       {view === "opportunities" && (
-        <DecisionList
-          title="Opportunities"
-          subtitle="Names you don't own — your broker won't surface these"
-          items={model.opportunities.slice(0, 10)}
-          onSelect={open}
-        />
+        <OpportunitiesOverview overview={opportunityOverview} onSelect={open} />
       )}
       {view === "map" && (
         <DecisionMap
@@ -421,6 +421,175 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
         ) : null}
       </div>
     </button>
+  );
+}
+
+// The Opportunities overview: not a flat ranked list but a map of where your book
+// has no exposure yet. It leads with the single standout idea, then groups every
+// name you don't own by theme — each theme badged with YOUR own exposure to it, so
+// blind spots (themes you hold nothing in) are surfaced first. The synthesis a
+// broker can't draw: it only ever shows what you already hold, never the gaps. The
+// grouping, exposure and gap-first ordering are unit-tested in lib/opportunities.ts;
+// every score/action is reused from the dashboard model, so this can't disagree
+// with the detail or compare views.
+function OpportunitiesOverview({
+  overview,
+  onSelect,
+}: {
+  overview: OpportunityOverview;
+  onSelect: (symbol: string) => void;
+}) {
+  const { standout, standoutExposure, groups, total, gapCount, themeCount } = overview;
+  const gapThemeCount = groups.filter((g) => g.isGap).length;
+
+  if (total === 0) {
+    return (
+      <section className="panel" aria-label="Opportunities">
+        <div className="panel-heading">
+          <div>
+            <h2>Opportunities</h2>
+            <span>Names you don&apos;t own — and where your book has no exposure yet</span>
+          </div>
+        </div>
+        <p className="empty">No opportunities in the universe right now. Every curated name is one you already hold.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel opps" aria-label="Opportunities">
+      <div className="panel-heading">
+        <div>
+          <h2>Opportunities</h2>
+          <span>Names you don&apos;t own — and where your book has no exposure yet</span>
+        </div>
+        <span className="count">{total}</span>
+      </div>
+
+      {standout && <StandoutIdea rec={standout} exposure={standoutExposure} onSelect={onSelect} />}
+
+      <p className="opps-summary">
+        <strong>{total}</strong> {total === 1 ? "idea" : "ideas"} across <strong>{themeCount}</strong>{" "}
+        {themeCount === 1 ? "theme" : "themes"}
+        {gapCount > 0 ? (
+          <>
+            {" · "}
+            <strong className="opps-summary-gap">{gapCount}</strong> in {gapThemeCount}{" "}
+            {gapThemeCount === 1 ? "theme" : "themes"} you don&apos;t own yet
+          </>
+        ) : (
+          " · all in themes you already hold"
+        )}
+      </p>
+
+      <div className="opp-groups">
+        {groups.map((group) => (
+          <ThemeGroup key={group.theme} group={group} onSelect={onSelect} />
+        ))}
+      </div>
+
+      <p className="estimate-note">
+        Grouped by each name&apos;s primary theme and ranked by the model&apos;s own score. Your exposure is measured from
+        your imported weights; the themes themselves are an editorial classification. A <em>gap</em> means you hold no
+        name tagged with that theme — a blind spot your broker won&apos;t flag.
+      </p>
+    </section>
+  );
+}
+
+// The featured idea: the single best name you don't own, framed with whether it
+// opens new ground (a theme you hold nothing in) or doubles down on an existing
+// tilt — the portfolio-aware context a broker's "top movers" list never carries.
+function StandoutIdea({
+  rec,
+  exposure,
+  onSelect,
+}: {
+  rec: Recommendation;
+  exposure: OpportunityOverview["standoutExposure"];
+  onSelect: (symbol: string) => void;
+}) {
+  const { company } = rec;
+  return (
+    <button
+      type="button"
+      className="opp-hero"
+      onClick={() => onSelect(company.symbol)}
+      aria-label={`Standout idea: ${company.name}, score ${rec.score}, ${rec.action} — open detail`}
+    >
+      <ScoreRing score={rec.score} action={rec.action} large />
+      <div className="opp-hero-body">
+        <span className="opp-hero-eyebrow">Standout idea · you don&apos;t own it</span>
+        <strong className="opp-hero-name">{company.name}</strong>
+        <div className="opp-hero-meta">
+          <Action action={rec.action} />
+          <span className="opp-hero-conv">
+            {rec.conviction} conviction · {rec.measured ? "data-backed" : "editorial"}
+          </span>
+          {rec.compliance.status !== "unknown" && (
+            <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
+          )}
+        </div>
+        <p className="opp-hero-why">{rec.headline}</p>
+        <p className="opp-hero-fit">{standoutFit(exposure)}</p>
+      </div>
+      {company.market?.dayChangePct !== undefined && (
+        <div className="opp-hero-right">
+          <span className={`dc-return ${toneClass(company.market.dayChangePct)}`}>
+            {formatSignedPct(company.market.dayChangePct)}
+          </span>
+          <span className="dc-broker">today</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// The one-line portfolio fit for the standout. Honest in both cases: either the
+// theme is genuinely absent from your book, or it adds to a tilt you can quantify.
+function standoutFit(exposure: OpportunityOverview["standoutExposure"]): string {
+  if (!exposure) return "A name outside your current book.";
+  if (exposure.isGap) {
+    return `Opens new ground — your book has no ${prettyTheme(exposure.theme)} exposure today.`;
+  }
+  const holdings = `${exposure.ownedCount} ${exposure.ownedCount === 1 ? "holding" : "holdings"}`;
+  return `Adds to your ${prettyTheme(exposure.theme)} tilt — already ${holdings}, ${exposure.ownedWeightPct.toFixed(0)}% of your book.`;
+}
+
+// One theme section: a theme eyebrow plus the signature exposure meter encoding how
+// much of your book is already here, then the opportunity rows. A gap theme reads
+// visually empty (dashed, accent-labelled) so the absence is the point.
+function ThemeGroup({ group, onSelect }: { group: OpportunityGroup; onSelect: (symbol: string) => void }) {
+  const { theme, opportunities, ownedCount, ownedWeightPct, isGap } = group;
+  const fill = Math.max(0, Math.min(100, ownedWeightPct));
+  const exposureLabel = isGap
+    ? "Gap · you own none"
+    : `${ownedCount} ${ownedCount === 1 ? "holding" : "holdings"} · ${ownedWeightPct.toFixed(0)}% of book`;
+  return (
+    <section className={`opp-group ${isGap ? "is-gap" : ""}`} aria-label={`${prettyTheme(theme)} opportunities`}>
+      <header className="opp-group-head">
+        <span className="opp-theme">{prettyTheme(theme)}</span>
+        <div
+          className="opp-exposure"
+          role="img"
+          aria-label={
+            isGap
+              ? `Your exposure to ${prettyTheme(theme)}: none — a gap in your book`
+              : `Your exposure to ${prettyTheme(theme)}: ${ownedCount} ${ownedCount === 1 ? "holding" : "holdings"}, ${ownedWeightPct.toFixed(0)} percent of your book`
+          }
+        >
+          <span className="opp-exposure-label">{exposureLabel}</span>
+          <span className="opp-meter" aria-hidden="true">
+            {!isGap && <span className="opp-meter-fill" style={{ width: `${fill}%` }} />}
+          </span>
+        </div>
+      </header>
+      <div className="decision-grid">
+        {opportunities.map((item) => (
+          <DecisionCard key={item.company.symbol} item={item} onSelect={onSelect} />
+        ))}
+      </div>
+    </section>
   );
 }
 

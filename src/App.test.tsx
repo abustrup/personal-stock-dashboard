@@ -93,6 +93,31 @@ describe("App", () => {
     expect(rows.some((row) => /you (own it|don't own it)/i.test(row.getAttribute("aria-label") ?? ""))).toBe(true);
   });
 
+  it("groups opportunities by theme, leads with a standout, and surfaces blind spots", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+
+    const panel = screen.getByLabelText(/^Opportunities$/i);
+    // Leads with the single featured idea you don't own.
+    expect(within(panel).getByText(/standout idea/i)).toBeInTheDocument();
+    // The overview summary counts ideas and themes.
+    expect(within(panel).getByText(/ideas across/i)).toBeInTheDocument();
+    // At least one theme is a blind spot the user holds nothing in.
+    expect(within(panel).getAllByText(/gap · you own none/i).length).toBeGreaterThan(0);
+
+    // No silent slicing: every non-owned name in the demo universe is shown as a
+    // row (13 = 19 curated names − 6 demo holdings), not capped at ten.
+    const cards = within(panel)
+      .getAllByRole("button")
+      .filter((button) => button.classList.contains("decision-card"));
+    expect(cards).toHaveLength(13);
+
+    // Opening a name from a theme group routes to its detail view.
+    fireEvent.click(cards[0]);
+    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+  });
+
   it("plots holdings and opportunities on the decision map and opens a name", () => {
     render(<App />);
 
