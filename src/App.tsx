@@ -519,8 +519,17 @@ function ScoreRing({ score, action, large }: { score: number; action: Recommenda
   const r = 20;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - Math.max(0, Math.min(100, score)) / 100);
+  // The ring is the dashboard's central decision metric. Expose it to assistive
+  // technology as a single labelled image (role="img" so the inner <text> isn't
+  // announced on its own as a bare, context-free number); sighted layout is
+  // unchanged.
   return (
-    <svg className={`ring ${large ? "ring-lg" : ""}`} viewBox="0 0 48 48" aria-hidden="true">
+    <svg
+      className={`ring ${large ? "ring-lg" : ""}`}
+      viewBox="0 0 48 48"
+      role="img"
+      aria-label={`Score ${score} of 100`}
+    >
       <circle className="ring-track" cx="24" cy="24" r={r} />
       <circle
         className={`ring-arc ${action}`}

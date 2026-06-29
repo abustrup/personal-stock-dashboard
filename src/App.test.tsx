@@ -24,6 +24,27 @@ describe("App", () => {
     expect(screen.getByText(/in NVIDIA Corp\./i)).toBeInTheDocument();
   });
 
+  it("exposes the model score to assistive technology, one ring per holding card", () => {
+    render(<App />);
+
+    // The score ring is the dashboard's central decision metric; it must carry
+    // an accessible name so screen-reader users hear the score, not nothing.
+    // Exact-name match guards against the inner <text> leaking back into the
+    // announcement (which would read as a bare, context-free number).
+    const scores = screen.getAllByRole("img", { name: /^Score \d+ of 100$/ });
+    const cards = screen.getAllByRole("button").filter((button) => button.classList.contains("decision-card"));
+    expect(cards.length).toBeGreaterThan(0);
+    expect(scores.length).toBe(cards.length);
+  });
+
+  it("exposes the model score in the company detail view", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+    // The detail hero shows exactly one score ring with a clean accessible name.
+    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+  });
+
   it("shows where a holding sits within the book when opened", () => {
     render(<App />);
 
