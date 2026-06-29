@@ -1931,112 +1931,229 @@ body > #root {
   font-size: 12px;
 }
 
-/* ---------- decision map ---------- */
-.map-frame {
-  position: relative;
-  margin: 4px 0 14px;
+/* ---------- decision board (the map, as four score×risk zones) ---------- */
+.board-wrap {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  grid-template-rows: 1fr 18px;
+  gap: 4px 8px;
+  margin: 6px 0 14px;
 }
-
-.map-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--card-border);
-  border-radius: var(--r-inset);
-  overflow: visible;
-}
-
-.map-plane {
-  fill: none;
-  stroke: transparent;
-}
-
-/* the single tinted region: strong & steady (bottom-right) */
-.map-quadrant {
-  fill: rgba(31, 122, 82, 0.06);
-}
-
-.map-mid {
-  stroke: var(--line);
-  stroke-width: 1;
-}
-
-.map-quad-label {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.map-quad-label.steady {
-  fill: var(--up);
-}
-.map-quad-label.faint {
-  fill: var(--faint);
-}
-.map-quad-label.avoid {
-  fill: #c08a84;
-}
-
-.map-axis {
-  fill: var(--chevron);
+.board-axis-y {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+  justify-self: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--chevron);
 }
-.map-axis-end {
-  fill: var(--faint);
+.board {
+  grid-row: 1;
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "avoid risky"
+    "low steady";
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-inset);
+  background: var(--card);
+}
+.board-axis-x {
+  grid-row: 2;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 9px;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--chevron);
+}
+.board-axis-x span:nth-child(2) {
+  color: var(--muted);
 }
 
-.map-dot {
-  cursor: pointer;
+.zone {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: var(--r-inset);
+  background: var(--inset);
 }
-.map-mark {
-  transition: r 0.15s ease;
+.zone-strong-steady {
+  grid-area: steady;
+  background: rgba(31, 122, 82, 0.07);
 }
-.map-mark.fill {
-  fill: var(--ink);
-  stroke: var(--ink);
+.zone-strong-risky {
+  grid-area: risky;
 }
-.map-mark.hollow {
-  fill: var(--card);
-  stroke: #8a9099;
-  stroke-width: 1.5;
+.zone-low-priority {
+  grid-area: low;
 }
-.map-dot.top-opp .map-mark.hollow {
-  stroke: var(--accent);
-  stroke-width: 2;
+.zone-avoid-zone {
+  grid-area: avoid;
+  background: rgba(179, 50, 42, 0.05);
 }
-.map-dot.flagged .map-mark.hollow {
-  stroke: var(--eifo);
-  stroke-dasharray: 2.5 2.5;
+
+.zone-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
-.map-flag-ring {
-  fill: none;
-  stroke: var(--eifo);
-  stroke-width: 1.2;
-  stroke-dasharray: 2.5 2.5;
-}
-.map-mark-label {
-  fill: var(--ink);
+.zone-name {
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.map-mark-label.opp {
-  fill: var(--muted-2);
+.zone-strong-steady .zone-name {
+  color: var(--up);
+}
+.zone-avoid-zone .zone-name {
+  color: #c08a84;
+}
+.zone-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.zone-gloss {
+  margin: 4px 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted-2);
+}
+.zone-empty {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--faint);
+}
+.zone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+/* grid items default to min-width:auto, which lets a long name overflow instead
+   of truncating — pin it to 0 so the chip name's ellipsis can engage. */
+.zone-list li {
+  min-width: 0;
+}
+.zone-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-inset);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+.zone-chip:hover {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.zone-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.zone-marker {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: none;
+}
+.zone-marker.owned {
+  background: var(--ink);
+}
+.zone-marker.opp {
+  background: var(--card);
+  border: 1.5px solid #8a9099;
+}
+.zone-marker.flagged {
+  background: var(--card);
+  border: 1.5px dashed var(--eifo);
+}
+.zone-marker.top-opp {
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+}
+.zone-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--body);
+}
+.zone-chip-weight {
+  flex: none;
+  font-size: 10px;
   font-weight: 600;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
 }
-.map-mark-label.top-opp {
-  fill: var(--accent);
+.zone-chip-tag {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
-.map-dot:hover .map-mark,
-.map-dot:focus-visible .map-mark {
-  filter: drop-shadow(0 0 0 5px rgba(47, 95, 208, 0.16));
+.zone-chip-score {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
-.map-dot:hover > circle.map-mark {
-  r: 16;
+.zone-chip-score.increase {
+  color: var(--up);
+}
+.zone-chip-score.investigate {
+  color: var(--accent);
+}
+.zone-chip-score.trim,
+.zone-chip-score.avoid {
+  color: var(--down);
+}
+.zone-more {
+  margin-top: 8px;
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.zone-more:hover {
+  text-decoration: underline;
+}
+.zone-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .map-legend {
@@ -2054,23 +2171,24 @@ body > #root {
   align-items: center;
   gap: 7px;
 }
-.map-swatch.fill {
-  fill: var(--ink);
-}
-.map-swatch.hollow {
-  fill: var(--card);
-  stroke: #8a9099;
-  stroke-width: 1.5;
-}
-.map-swatch.flag {
-  fill: var(--card);
-  stroke: var(--eifo);
-  stroke-width: 1.5;
-  stroke-dasharray: 2.5 2.5;
-}
 .map-note {
   color: var(--faint);
   font-weight: 500;
+}
+
+@media (max-width: 760px) {
+  .board {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "steady"
+      "risky"
+      "low"
+      "avoid";
+  }
+  .board-axis-y,
+  .board-axis-x {
+    display: none;
+  }
 }
 
 /* ---------- detail view ---------- */

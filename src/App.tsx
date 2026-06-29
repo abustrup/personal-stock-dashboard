@@ -20,13 +20,9 @@ import { buildDashboardModel } from "./lib/dashboard";
 import { buildInsights, RISK_FACTORS, type HoldingContext, type RiskFactor } from "./lib/insights";
 import {
   buildMapPoints,
-  markerRadius,
-  projectPoint,
   QUADRANT_LABELS,
-  RISK_MIDLINE,
-  SCORE_MIDLINE,
   type MapPoint,
-  type PlaneDims,
+  type MapQuadrant,
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { buildComparison, type Comparison, type Side } from "./lib/compare";
@@ -1760,6 +1756,22 @@ function standoutFit(exposure: OpportunityOverview["standoutExposure"]): string 
 // model's own; risk (y) is the mean of the valuation, balance-sheet and
 // geopolitical axes. Pure SVG, no chart dependency; the projection/quadrant math
 // is unit-tested in lib/map.ts so the picture can't drift from the numbers.
+// The decision board replaces the old score×risk scatter — which, with a real
+// (clustered) book, piled markers and labels on top of each other exactly where
+// it mattered. It keeps the same synthesis (the model's score against a composite
+// risk index) but as four categorical zones the lib already computes: each name is
+// binned into its quadrant and ranked by score within it, so the picture is legible
+// however many names there are. The four cells are still laid out as a plane
+// (risk ↑, score →) so the 2-D mental model survives without the overlap.
+const ZONE_ORDER: MapQuadrant[] = ["strong-steady", "strong-risky", "low-priority", "avoid-zone"];
+
+const ZONE_GLOSS: Record<MapQuadrant, string> = {
+  "strong-steady": "High score, low risk — where you want names to land.",
+  "strong-risky": "High score, but a high risk index — size with care.",
+  "low-priority": "Low risk, but the model isn't sold — little urgency.",
+  "avoid-zone": "Low score and high risk — the model's least favourite.",
+};
+
 function DecisionMap({
   portfolio,
   opportunities,
@@ -1783,7 +1795,7 @@ function DecisionMap({
         <div className="panel-heading">
           <div>
             <h2>Decision map</h2>
-            <span>Score against risk — your book and the field on one plane</span>
+            <span>Score against risk — your book and the field, sorted into four zones</span>
           </div>
         </div>
         <p className="empty">Import a portfolio to map it against the opportunity set.</p>
@@ -1791,170 +1803,161 @@ function DecisionMap({
     );
   }
 
-  const dims: PlaneDims = { width: 720, height: 460, padX: 54, padY: 40 };
-  const left = dims.padX;
-  const right = dims.width - dims.padX;
-  const top = dims.padY;
-  const bottom = dims.height - dims.padY;
-  const midX = projectPoint(SCORE_MIDLINE, 0, dims).x;
-  const midY = projectPoint(0, RISK_MIDLINE, dims).y;
-
-  const maxWeight = portfolio.reduce(
-    (max, rec) => Math.max(max, rec.holding?.portfolioWeight ?? 0),
-    0,
-  );
-  const scale = { minR: 5, maxR: 15, maxWeight };
-
-  // Draw opportunities first so owned holdings (filled, labelled) sit on top.
-  const ordered = [...points].sort((a, b) => Number(a.owned) - Number(b.owned));
+  // Bin every name into its zone, then rank within each zone by score (owned wins
+  // ties so your holdings surface first). The zone IS the recommendation.
+  const byZone = new Map<MapQuadrant, MapPoint[]>(ZONE_ORDER.map((q) => [q, []]));
+  for (const point of points) byZone.get(point.quadrant)!.push(point);
+  for (const list of byZone.values()) {
+    list.sort((a, b) => b.score - a.score || Number(b.owned) - Number(a.owned));
+  }
 
   return (
-    <section className="panel map-panel" aria-label="Decision map">
+    <section className="panel" aria-label="Decision map">
       <div className="panel-heading">
         <div>
           <h2>Decision map</h2>
-          <span>Score × risk · one plane — your book and the field, the synthesis a broker can&apos;t draw</span>
+          <span>Score × risk · four zones — your book and the field, the synthesis a broker can&apos;t draw</span>
         </div>
-        <span className="count">{points.length} plotted</span>
+        <span className="count">{points.length} names</span>
       </div>
 
-      <div className="map-frame">
-        <svg
-          className="map-svg"
-          viewBox={`0 0 ${dims.width} ${dims.height}`}
+      <div className="board-wrap">
+        <span className="board-axis-y" aria-hidden="true">
+          Risk ↑
+        </span>
+        <div
+          className="board"
           role="group"
-          aria-label={`Risk-reward map of ${ownedCount} holdings and ${shownOpportunities.length} opportunities`}
+          aria-label={`Risk-reward zones for ${ownedCount} holdings and ${shownOpportunities.length} opportunities`}
         >
-          {/* The one tinted region: where you want names to land (strong & steady). */}
-          <rect className="map-quadrant" x={midX} y={midY} width={right - midX} height={bottom - midY} />
-
-          {/* Plane frame + midlines */}
-          <rect className="map-plane" x={left} y={top} width={right - left} height={bottom - top} />
-          <line className="map-mid" x1={midX} y1={top} x2={midX} y2={bottom} />
-          <line className="map-mid" x1={left} y1={midY} x2={right} y2={midY} />
-
-          {/* Quadrant labels in their corners (structure carries meaning) */}
-          <text className="map-quad-label steady" x={right - 8} y={bottom - 8} textAnchor="end">
-            {QUADRANT_LABELS["strong-steady"]}
-          </text>
-          <text className="map-quad-label faint" x={right - 8} y={top + 14} textAnchor="end">
-            {QUADRANT_LABELS["strong-risky"]}
-          </text>
-          <text className="map-quad-label faint" x={left + 8} y={bottom - 8}>
-            {QUADRANT_LABELS["low-priority"]}
-          </text>
-          <text className="map-quad-label avoid" x={left + 8} y={top + 14}>
-            {QUADRANT_LABELS["avoid-zone"]}
-          </text>
-
-          {/* Axis cue */}
-          <text className="map-axis" x={(left + right) / 2} y={dims.height - 12} textAnchor="middle">
-            Model score →
-          </text>
-          <text className="map-axis-end" x={left} y={dims.height - 12} textAnchor="start">
-            weaker
-          </text>
-          <text className="map-axis-end" x={right} y={dims.height - 12} textAnchor="end">
-            stronger
-          </text>
-          <text
-            className="map-axis"
-            x={16}
-            y={(top + bottom) / 2}
-            textAnchor="middle"
-            transform={`rotate(-90 16 ${(top + bottom) / 2})`}
-          >
-            Risk ↑
-          </text>
-
-          {ordered.map((point) => (
-            <MapMarker
-              key={point.symbol}
-              point={point}
-              dims={dims}
-              scale={scale}
-              isTopOpp={!point.owned && point.symbol === topOpportunitySymbol}
+          {ZONE_ORDER.map((quadrant) => (
+            <ZoneCell
+              key={quadrant}
+              quadrant={quadrant}
+              points={byZone.get(quadrant)!}
+              topOpportunitySymbol={topOpportunitySymbol}
               onSelect={onSelect}
             />
           ))}
-        </svg>
+        </div>
+        <div className="board-axis-x" aria-hidden="true">
+          <span>weaker</span>
+          <span>Model score →</span>
+          <span>stronger</span>
+        </div>
       </div>
 
       <div className="map-legend">
         <span className="map-key">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle className="map-swatch fill" cx="8" cy="8" r="6" />
-          </svg>
-          Your holdings
+          <span className="zone-marker owned" aria-hidden="true" /> Your holdings
         </span>
         <span className="map-key">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle className="map-swatch hollow" cx="8" cy="8" r="5.5" />
-          </svg>
-          Opportunities
+          <span className="zone-marker opp" aria-hidden="true" /> Opportunities
         </span>
         <span className="map-key">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle className="map-swatch flag" cx="8" cy="8" r="5.5" />
-          </svg>
-          EIFO flag
+          <span className="zone-marker opp flagged" aria-hidden="true" /> EIFO flag
         </span>
-        <span className="map-note">Click any marker for the breakdown.</span>
+        <span className="map-note">Click any name for the breakdown.</span>
       </div>
 
       <p className="estimate-note">
-        Plotting your {ownedCount} {ownedCount === 1 ? "holding" : "holdings"} and the top{" "}
-        {shownOpportunities.length} of {opportunities.length} opportunities. Score is the model&apos;s; risk is the
-        mean of the valuation and balance-sheet axes (measured once fundamentals are fetched, editorial
-        otherwise) and the geopolitical axis (always editorial). A dashed ring marks an EIFO compliance flag.
+        Your {ownedCount} {ownedCount === 1 ? "holding" : "holdings"} and the top {shownOpportunities.length} of{" "}
+        {opportunities.length} opportunities, binned into four zones by the model score and a composite risk index
+        (the mean of the valuation and balance-sheet axes — measured once fundamentals are fetched, editorial
+        otherwise — and the always-editorial geopolitical axis), then ranked by score within each zone. A dashed
+        marker flags an EIFO compliance concern.
       </p>
     </section>
   );
 }
 
-function MapMarker({
+// One zone of the board: a tinted cell holding the names that fall in that
+// score×risk quadrant, ranked by score. Long zones cap to the top few with a
+// "+N more" toggle so a crowded sweet spot never blows out the grid.
+function ZoneCell({
+  quadrant,
+  points,
+  topOpportunitySymbol,
+  onSelect,
+}: {
+  quadrant: MapQuadrant;
+  points: MapPoint[];
+  topOpportunitySymbol?: string;
+  onSelect: (symbol: string) => void;
+}) {
+  const CAP = 7;
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? points : points.slice(0, CAP);
+  const hidden = points.length - visible.length;
+  return (
+    <div className={`zone zone-${quadrant}`}>
+      <div className="zone-head">
+        <span className="zone-name">{QUADRANT_LABELS[quadrant]}</span>
+        <span className="zone-count">{points.length}</span>
+      </div>
+      <p className="zone-gloss">{ZONE_GLOSS[quadrant]}</p>
+      {points.length === 0 ? (
+        <p className="zone-empty">No names here.</p>
+      ) : (
+        <ul className="zone-list">
+          {visible.map((point) => (
+            <ZoneChip
+              key={point.symbol}
+              point={point}
+              isTopOpp={!point.owned && point.symbol === topOpportunitySymbol}
+              onSelect={onSelect}
+            />
+          ))}
+        </ul>
+      )}
+      {points.length > CAP && (
+        <button type="button" className="zone-more" onClick={() => setShowAll((value) => !value)}>
+          {showAll ? "Show fewer" : `+${hidden} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// One name in a zone: a clickable row carrying the ownership marker (filled =
+// owned, hollow = opportunity, dashed = EIFO-flagged, blue = the lead idea), the
+// company name, a weight tag for holdings, and the model score coloured by verdict.
+function ZoneChip({
   point,
-  dims,
-  scale,
   isTopOpp,
   onSelect,
 }: {
   point: MapPoint;
-  dims: PlaneDims;
-  scale: { minR: number; maxR: number; maxWeight: number };
   isTopOpp: boolean;
   onSelect: (symbol: string) => void;
 }) {
-  const { x, y } = projectPoint(point.score, point.risk, dims);
-  const r = markerRadius(point, scale);
   const flagged = point.compliance !== "unknown";
   const label = `${point.name}: ${point.action}, score ${point.score}, risk ${point.risk}, ${
     point.owned ? `${point.weightPct.toFixed(1)}% of your book` : "not owned"
   }${flagged ? `, EIFO ${point.compliance.replace("_", " ")}` : ""}`;
-  const labelClass = point.owned ? "map-mark-label" : isTopOpp ? "map-mark-label top-opp" : "map-mark-label opp";
   return (
-    <g
-      className={`map-dot ${mapTone(point.action)} ${point.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}${
-        isTopOpp ? " top-opp" : ""
-      }`}
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      onClick={() => onSelect(point.symbol)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(point.symbol);
-        }
-      }}
-    >
-      <title>{label}</title>
-      {flagged && <circle className="map-flag-ring" cx={x} cy={y} r={r + 3.5} />}
-      <circle className={point.owned ? "map-mark fill" : "map-mark hollow"} cx={x} cy={y} r={r} />
-      <text className={labelClass} x={x} y={y + r + 12} textAnchor="middle">
-        {isTopOpp ? `${point.symbol} ${point.score}` : point.symbol}
-      </text>
-    </g>
+    <li>
+      <button
+        type="button"
+        className={`zone-chip${isTopOpp ? " top-opp" : ""}`}
+        aria-label={label}
+        onClick={() => onSelect(point.symbol)}
+      >
+        <span
+          className={`zone-marker ${point.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}${
+            isTopOpp ? " top-opp" : ""
+          }`}
+          aria-hidden="true"
+        />
+        <span className="zone-chip-name">{point.name}</span>
+        {point.owned ? (
+          <span className="zone-chip-weight">{point.weightPct.toFixed(0)}%</span>
+        ) : isTopOpp ? (
+          <span className="zone-chip-tag">↗ lead</span>
+        ) : null}
+        <span className={`zone-chip-score ${point.action}`}>{point.score}</span>
+      </button>
+    </li>
   );
 }
 
