@@ -12,7 +12,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
@@ -48,10 +48,12 @@ import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
 import {
   assessInvestability,
   investableSymbols,
+  reachBreakdown,
   summarizeInvestability,
   type BrokerSettings,
   type Investability,
   type InvestabilitySummary,
+  type ReachBreakdown,
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
@@ -242,6 +244,14 @@ export default function App() {
     () => summarizeInvestability(model.opportunities, brokerSettings),
     [model.opportunities, brokerSettings],
   );
+  // The named off-limits breakdown behind those counts — which specific stocks are
+  // off the broker or over budget, and why. Built from the FULL opportunity set
+  // (independent of the hide-off-limits toggle) so the panel always names every
+  // idea it filtered, even when the rows below are hidden.
+  const reach: ReachBreakdown = useMemo(
+    () => reachBreakdown(model.opportunities, brokerSettings),
+    [model.opportunities, brokerSettings],
+  );
   const visibleOpportunities = useMemo(
     () => (hideOffLimits ? model.opportunities.filter((rec) => oppInvestableSet.has(rec.company.symbol)) : model.opportunities),
     [hideOffLimits, model.opportunities, oppInvestableSet],
@@ -414,6 +424,7 @@ export default function App() {
           <OpportunitiesOverview
             overview={opportunityOverview}
             summary={investSummary}
+            reach={reach}
             settings={brokerSettings}
             markets={knownMarkets}
             onChangeSettings={updateBrokerSettings}
@@ -1202,6 +1213,152 @@ function BrokerBar({
   );
 }
 
+// The reachability readout: of every idea the model ranks, how many can you
+// actually act on — through YOUR broker, at YOUR per-trade budget — and which
+// ones can't, named and grouped by the reason. The segmented bar is the signature:
+// one track partitioned into within-reach (green), off your broker (slate) and
+// over budget (amber), so the proportion you can touch is visible at a glance.
+// Counts come from summarizeInvestability; the named lists from reachBreakdown,
+// both off the same assessInvestability call — so they can never disagree. This is
+// the synthesis a broker can't give: its screen never tells you a top mover is on a
+// market it can't trade, or that a single share already overshoots your sizing.
+function ReachPanel({
+  summary,
+  reach,
+  budgetDkk,
+  hideOffLimits,
+  onToggleOffLimits,
+  onSelect,
+}: {
+  summary: InvestabilitySummary;
+  reach: ReachBreakdown;
+  budgetDkk: number;
+  hideOffLimits: boolean;
+  onToggleOffLimits: (next: boolean) => void;
+  onSelect: (symbol: string) => void;
+}) {
+  const { investable, offPlatform, aboveBudget, total } = summary;
+  const offLimitsTotal = offPlatform + aboveBudget;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  const allClear = offLimitsTotal === 0;
+  const hasApproxCost = reach.aboveBudget.some((name) => name.fxApprox);
+
+  return (
+    <section className="reach" aria-label="What you can act on">
+      <div className="reach-head">
+        <div>
+          <p className="reach-eyebrow">Within reach</p>
+          <p className="reach-lead">
+            {allClear ? (
+              <>
+                All <strong>{total}</strong> {total === 1 ? "idea" : "ideas"} clear your broker and your DKK{" "}
+                {formatNumber(budgetDkk)} per-trade budget.
+              </>
+            ) : (
+              <>
+                <strong>{investable}</strong> of {total} {total === 1 ? "idea is" : "ideas are"} buyable through Saxo
+                at your DKK {formatNumber(budgetDkk)} per trade — the rest are named below, not silently dropped.
+              </>
+            )}
+          </p>
+        </div>
+        {offLimitsTotal > 0 && (
+          <label className="invest-toggle">
+            <input
+              type="checkbox"
+              checked={hideOffLimits}
+              onChange={(event) => onToggleOffLimits(event.target.checked)}
+            />
+            <span>Hide off-limits</span>
+          </label>
+        )}
+      </div>
+
+      <div
+        className="reach-bar"
+        role="img"
+        aria-label={`${investable} of ${total} ideas within reach; ${offPlatform} off your broker; ${aboveBudget} over your DKK ${formatNumber(budgetDkk)} per-trade budget`}
+      >
+        {investable > 0 && (
+          <span className="reach-seg ok" style={{ width: `${pct(investable)}%` }} title={`${investable} within reach`} />
+        )}
+        {offPlatform > 0 && (
+          <span className="reach-seg off" style={{ width: `${pct(offPlatform)}%` }} title={`${offPlatform} off your broker`} />
+        )}
+        {aboveBudget > 0 && (
+          <span className="reach-seg budget" style={{ width: `${pct(aboveBudget)}%` }} title={`${aboveBudget} over budget`} />
+        )}
+      </div>
+
+      <div className="reach-legend">
+        <span className="reach-key ok">
+          <i aria-hidden="true" /> <strong>{investable}</strong> to act on
+        </span>
+        {offPlatform > 0 && (
+          <span className="reach-key off">
+            <Landmark aria-hidden="true" size={12} /> <strong>{offPlatform}</strong> off your broker
+          </span>
+        )}
+        {aboveBudget > 0 && (
+          <span className="reach-key budget">
+            <Wallet aria-hidden="true" size={12} /> <strong>{aboveBudget}</strong> over budget
+          </span>
+        )}
+      </div>
+
+      {offLimitsTotal > 0 && (
+        <ul className="reach-blocked">
+          {reach.offPlatform.map((group) => (
+            <li className="reach-block off" key={group.exchange}>
+              <span className="reach-block-reason">
+                <Landmark aria-hidden="true" size={13} /> Off your broker · {group.exchange}
+              </span>
+              <span className="reach-block-names">
+                {group.names.map((name, index) => (
+                  <Fragment key={name.symbol}>
+                    {index > 0 && <span className="reach-sep" aria-hidden="true">·</span>}
+                    <button type="button" className="reach-name" onClick={() => onSelect(name.symbol)}>
+                      {name.name}
+                    </button>
+                  </Fragment>
+                ))}
+              </span>
+            </li>
+          ))}
+          {reach.aboveBudget.length > 0 && (
+            <li className="reach-block budget">
+              <span className="reach-block-reason">
+                <Wallet aria-hidden="true" size={13} /> Over your DKK {formatNumber(budgetDkk)} budget
+              </span>
+              <span className="reach-block-names">
+                {reach.aboveBudget.map((name, index) => (
+                  <Fragment key={name.symbol}>
+                    {index > 0 && <span className="reach-sep" aria-hidden="true">·</span>}
+                    <button type="button" className="reach-name" onClick={() => onSelect(name.symbol)}>
+                      {name.name}
+                      {name.sharePriceDkk !== undefined && (
+                        <span className="reach-name-cost">
+                          {" "}
+                          1 share ≈ DKK {formatNumber(name.sharePriceDkk)}
+                          {name.fxApprox ? "*" : ""}
+                        </span>
+                      )}
+                    </button>
+                  </Fragment>
+                ))}
+              </span>
+            </li>
+          )}
+        </ul>
+      )}
+
+      {hasApproxCost && (
+        <p className="reach-foot">* one-share cost converted to DKK at an approximate rate — enough to size it, not a quote.</p>
+      )}
+    </section>
+  );
+}
+
 // The Opportunities overview: not a flat ranked list but a map of where your book
 // has no exposure yet. It leads with the single standout idea, then groups every
 // name you don't own by theme — each theme badged with YOUR own exposure to it, so
@@ -1213,6 +1370,7 @@ function BrokerBar({
 function OpportunitiesOverview({
   overview,
   summary,
+  reach,
   settings,
   markets,
   onChangeSettings,
@@ -1227,6 +1385,7 @@ function OpportunitiesOverview({
 }: {
   overview: OpportunityOverview;
   summary: InvestabilitySummary;
+  reach: ReachBreakdown;
   settings: BrokerSettings;
   markets: string[];
   onChangeSettings: (next: BrokerSettings) => void;
@@ -1310,35 +1469,14 @@ function OpportunitiesOverview({
         </p>
       )}
 
-      <div className="invest-bar">
-        <div className="invest-stats" role="group" aria-label="What you can act on">
-          <span className="invest-stat ok">
-            <strong>{summary.investable}</strong> to act on
-          </span>
-          {summary.offPlatform > 0 && (
-            <span className="invest-stat off">
-              <Landmark aria-hidden="true" size={13} />
-              <strong>{summary.offPlatform}</strong> off Saxo
-            </span>
-          )}
-          {summary.aboveBudget > 0 && (
-            <span className="invest-stat budget">
-              <Wallet aria-hidden="true" size={13} />
-              <strong>{summary.aboveBudget}</strong> over DKK {formatNumber(settings.perTradeBudgetDkk)}
-            </span>
-          )}
-        </div>
-        {offLimitsTotal > 0 && (
-          <label className="invest-toggle">
-            <input
-              type="checkbox"
-              checked={hideOffLimits}
-              onChange={(event) => onToggleOffLimits(event.target.checked)}
-            />
-            <span>Hide off-limits</span>
-          </label>
-        )}
-      </div>
+      <ReachPanel
+        summary={summary}
+        reach={reach}
+        budgetDkk={settings.perTradeBudgetDkk}
+        hideOffLimits={hideOffLimits}
+        onToggleOffLimits={onToggleOffLimits}
+        onSelect={onSelect}
+      />
 
       <p className="opps-summary">
         <strong>{total}</strong> {total === 1 ? "idea" : "ideas"} across <strong>{themeCount}</strong>{" "}
