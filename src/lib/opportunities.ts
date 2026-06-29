@@ -27,7 +27,7 @@ export type OpportunityOverview = {
   /** The single best idea you don't own (top non-avoid opportunity), if any. */
   standout?: Recommendation;
   /** Your portfolio exposure to the standout's primary theme — context for the hero. */
-  standoutExposure?: { theme: string; ownedCount: number; ownedWeightPct: number; isGap: boolean };
+  standoutExposure?: StandoutExposure;
   /** Opportunities grouped by their primary theme, gap themes surfaced first. */
   groups: OpportunityGroup[];
   /** Total number of opportunities in the overview. */
@@ -46,6 +46,71 @@ export type OpportunityOverview = {
 
 /** Owned exposure to a single theme: how many holdings and their combined weight. */
 type ThemeExposure = { ownedCount: number; ownedWeightPct: number };
+
+/** Your portfolio's exposure to one theme, with the gap flag — context for a hero idea. */
+export type StandoutExposure = { theme: string; ownedCount: number; ownedWeightPct: number; isGap: boolean };
+
+/**
+ * Your owned exposure to a single theme: how many holdings carry it and their
+ * combined portfolio weight, plus whether it's a gap (you own none). Only positions
+ * you actually hold count; a holding with the theme contributes its full weight.
+ * The one source of truth both the overview's standout context and the front-page
+ * next-buy card read from, so the two can never disagree about a theme's exposure.
+ */
+export function themeExposure(portfolio: Recommendation[], theme: string): StandoutExposure {
+  let ownedCount = 0;
+  let ownedWeightPct = 0;
+  for (const rec of portfolio) {
+    if (!rec.holding) continue;
+    if (rec.company.themes.includes(theme)) {
+      ownedCount += 1;
+      ownedWeightPct += rec.holding.portfolioWeight ?? 0;
+    }
+  }
+  return { theme, ownedCount, ownedWeightPct, isGap: ownedCount === 0 };
+}
+
+/** The best idea to act on, plus how many higher-scoring ideas were passed over. */
+export type StandoutPick = {
+  /**
+   * The single best idea to lead with: the highest-scoring non-avoid opportunity
+   * that clears the investability gate. Falls back to the top non-avoid idea when
+   * none clears the gate (or no gate is supplied), so there is always a pick when
+   * any non-avoid idea exists. Undefined only when every idea is an avoid.
+   */
+  standout?: Recommendation;
+  /**
+   * How many higher-scoring non-avoid ideas were skipped because they're off-limits
+   * (off-platform or over budget) before reaching `standout`. 0 when the top idea is
+   * itself investable, when it's the off-limits fallback, or when no gate was applied.
+   */
+  standoutSkipped: number;
+};
+
+/**
+ * Pick the standout idea to lead with — always one the user can actually act on
+ * when an investability gate is supplied. Scans the pre-ranked opportunities for
+ * the first non-avoid name that clears the gate; if a higher-scoring name is off
+ * your broker's markets or a single share is over budget, it's passed over and
+ * counted, so the UI can say so honestly. Without a gate this is simply the top
+ * non-avoid idea. Shared by the Opportunities overview and the front-page rail so
+ * the "top opportunity" the dashboard leads with is the same everywhere — and is
+ * never a name the user can't buy.
+ */
+export function pickActionableStandout(
+  opportunities: Recommendation[],
+  investableSymbols?: Set<string>,
+): StandoutPick {
+  const candidates = opportunities.filter((rec) => rec.action !== "avoid");
+  const firstInvestable = investableSymbols
+    ? candidates.findIndex((rec) => investableSymbols.has(rec.company.symbol))
+    : candidates.length > 0
+      ? 0
+      : -1;
+  const standout = firstInvestable >= 0 ? candidates[firstInvestable] : candidates[0];
+  const standoutSkipped = firstInvestable > 0 ? firstInvestable : 0;
+  return { standout, standoutSkipped };
+}
 
 /**
  * Map every theme any owned holding is tagged with to the count of holdings and
@@ -118,22 +183,13 @@ export function buildOpportunityOverview(
       a.theme.localeCompare(b.theme),
   );
 
-  // Lead with the best idea you can actually act on. When an investability filter
-  // is supplied, skip higher-scoring names that are off-platform or over budget so
-  // the hero is never an idea the user can't buy — and record how many were passed
-  // so the UI can say so honestly. Without a filter, this is just the top idea.
-  const candidates = opportunities.filter((rec) => rec.action !== "avoid");
-  const firstInvestable = investableSymbols
-    ? candidates.findIndex((rec) => investableSymbols.has(rec.company.symbol))
-    : candidates.length > 0
-      ? 0
-      : -1;
-  const standout = firstInvestable >= 0 ? candidates[firstInvestable] : candidates[0];
-  const standoutSkipped = firstInvestable > 0 ? firstInvestable : 0;
+  // Lead with the best idea you can actually act on — the shared picker skips
+  // higher-scoring names that are off-platform or over budget so the hero is never
+  // an idea the user can't buy, and records how many were passed so the UI can say
+  // so honestly. The same picker feeds the front-page rail, so the two agree.
+  const { standout, standoutSkipped } = pickActionableStandout(opportunities, investableSymbols);
   const standoutTheme = standout?.company.themes[0];
-  const standoutExposure = standoutTheme
-    ? { theme: standoutTheme, ...exposureFor(standoutTheme), isGap: exposureFor(standoutTheme).ownedCount === 0 }
-    : undefined;
+  const standoutExposure = standoutTheme ? themeExposure(portfolio, standoutTheme) : undefined;
 
   const gapCount = groups.filter((g) => g.isGap).reduce((sum, g) => sum + g.opportunities.length, 0);
 

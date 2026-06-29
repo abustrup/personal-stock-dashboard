@@ -841,6 +841,56 @@ body > #root {
   margin-top: 9px;
 }
 
+/* user-added / EIFO badges on the lead card, sharing the row badge styles */
+.rail-top-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* the portfolio-fit line: opens new ground, or adds to an existing tilt */
+.rail-top-fit {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.4;
+  margin-top: 9px;
+}
+
+/* the buy plan: whole shares your slot buys + share of the book — the step a
+   broker's "top movers" never takes. Tabular figures, quiet next to the why. */
+.rail-top-plan {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #3a4048;
+}
+
+.rail-top-plan svg {
+  flex-shrink: 0;
+  color: var(--muted-2);
+}
+
+/* the off-limits gate badge, when even the lead idea can't be acted on */
+.rail-top-gate {
+  margin-top: 9px;
+}
+
+/* the honest note when stronger ideas were skipped for being off-limits */
+.rail-top-skip {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--accent-border);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #5a616b;
+}
+
 .rail-brief {
   display: block;
   width: 100%;
@@ -1136,10 +1186,12 @@ body > #root {
 
 /* off-limits names recede until hovered */
 .standout.off-limits,
+.rail-top.off-limits,
 .lt-row.off-limits {
   opacity: 0.62;
 }
 .standout.off-limits:hover,
+.rail-top.off-limits:hover,
 .lt-row.off-limits:hover {
   opacity: 1;
 }

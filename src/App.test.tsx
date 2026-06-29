@@ -47,6 +47,28 @@ describe("App", () => {
     expect(screen.getByText(/\d+% in NVIDIA/i)).toBeInTheDocument();
   });
 
+  it("leads the front page with an opportunity you can actually act on, not just the top score", () => {
+    render(<App />);
+
+    const rail = screen.getByLabelText(/what saxo won.t say/i);
+    // The lead idea states the investability guarantee, and by default is the
+    // top-scoring name the user can buy (TSMC, listed on the NYSE).
+    expect(within(rail).getByText(/one you can act on/i)).toBeInTheDocument();
+    expect(within(rail).getByText(/Taiwan Semiconductor/i)).toBeInTheDocument();
+
+    // Mark the NYSE off the user's platform via the broker controls in Opportunities.
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+    fireEvent.click(screen.getByRole("button", { name: "NYSE" }));
+
+    // Back on the front page, the lead idea is no longer the now-untradable NYSE
+    // name — it falls through to the strongest name the user can still buy and says
+    // so, instead of headlining a stock the user can't act on.
+    fireEvent.click(screen.getByRole("button", { name: /^Portfolio/ }));
+    const railAfter = screen.getByLabelText(/what saxo won.t say/i);
+    expect(within(railAfter).queryByText(/Taiwan Semiconductor/i)).not.toBeInTheDocument();
+    expect(within(railAfter).getByText(/off-limits for your account/i)).toBeInTheDocument();
+  });
+
   it("synthesises the book into a theme composition band under the ledger", () => {
     render(<App />);
 
@@ -286,6 +308,48 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /remove cloudflare, inc\. from your watchlist/i }));
     expect(cardCount()).toBe(before);
     expect(within(screen.getByLabelText(/^Opportunities$/i)).queryByText(/added by you/i)).toBeNull();
+  });
+
+  it("sizes the front-page lead idea once a refresh's prices arrive (cache isn't stale)", async () => {
+    // The lead opportunity (TSMC, top of the demo set) is assessed on the first
+    // render — before the snapshot resolves — so its investability is cached as
+    // "no price yet". The assessment cache is keyed by symbol, so it MUST be rebuilt
+    // when the snapshot lands; otherwise that first verdict freezes and the buy plan
+    // (which needs the price) never appears. A strong momentum keeps TSMC the lead
+    // idea across the refresh, so the same name is assessed before and after.
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        TSM: {
+          symbol: "TSM",
+          price: 200,
+          currency: "USD",
+          dayChangePct: 0.4,
+          fiftyTwoWeekHigh: 230,
+          fiftyTwoWeekLow: 120,
+          return3m: 18,
+          return6m: 24,
+          momentum: 88,
+          asOf: "2026-06-28T18:49:41.386Z",
+        },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    // Once prices land, the lead card sizes a concrete buy plan from the live price —
+    // a measured share count and its share of the book — rather than staying frozen
+    // on the pre-fetch "no price yet" verdict.
+    const rail = screen.getByLabelText(/what saxo won.t say/i);
+    await waitFor(() => {
+      const plan = rail.querySelector(".rail-top-plan");
+      expect(plan).not.toBeNull();
+      expect(plan?.textContent).toMatch(/share.*DKK.*of your book/i);
+    });
+    expect(within(rail).getByText(/Taiwan Semiconductor/i)).toBeInTheDocument();
   });
 
   it("plots holdings and opportunities on the decision map and opens a name", () => {
