@@ -47,6 +47,22 @@ describe("App", () => {
     expect(screen.getByText(/\d+% in NVIDIA/i)).toBeInTheDocument();
   });
 
+  it("synthesises the book into a theme composition band under the ledger", () => {
+    render(<App />);
+
+    // The full-width rollup: what the book is betting on, by theme.
+    expect(screen.getByRole("heading", { name: /what your book is betting on/i })).toBeInTheDocument();
+    const band = screen.getByLabelText(/what your book is betting on/i);
+    // The spine is exposed to assistive tech as one labelled image describing the split.
+    expect(within(band).getByRole("img", { name: /your book split by theme/i })).toBeInTheDocument();
+    // The lead line names the dominant theme.
+    expect(within(band).getByText(/most in/i)).toBeInTheDocument();
+    // The honesty discipline is stated: a counted-once partition, measured weights,
+    // editorial taxonomy — never relabelled.
+    expect(within(band).getByText(/each counted once/i)).toBeInTheDocument();
+    expect(within(band).getByText(/Weights are\s+measured from your import/i)).toBeInTheDocument();
+  });
+
   it("exposes each holding's model score to assistive technology via the row name", () => {
     render(<App />);
 

@@ -663,6 +663,118 @@ body > #root {
   color: var(--muted-2);
 }
 
+/* ---------- book composition (full-width band under the portfolio grid) ---------- */
+.book-comp {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.book-comp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.book-comp-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.book-comp-head .ranked {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.book-comp-lead {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--body);
+}
+
+.book-comp-lead strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.book-comp-lead strong.book-comp-top {
+  color: var(--accent);
+}
+
+/* The spine: one proportional bar partitioned by primary theme. Segments are split
+   by a hairline of the card so they read as distinct slices — the ledger's thin-rule
+   idiom, not a foreign chart. */
+.spine {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: var(--r-inset);
+  overflow: hidden;
+  background: var(--bar-track);
+}
+
+.spine-seg {
+  flex-basis: 0;
+  min-width: 2px;
+  height: 100%;
+}
+
+.spine-seg + .spine-seg {
+  border-left: 1.5px solid var(--card);
+}
+
+.comp-legend {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.comp-row {
+  display: grid;
+  grid-template-columns: 10px max-content minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.comp-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.comp-theme {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.comp-meta {
+  font-size: 12.5px;
+  color: var(--muted-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.comp-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: right;
+}
+
 /* row badges (added-by-you, EIFO flag, overlap, investability gate) sit inline
    with the name and stay legible at small size */
 .lt-badges {
@@ -2758,6 +2870,16 @@ body > #root {
 @media (max-width: 620px) {
   body > #root {
     padding: 16px 12px 32px;
+  }
+  /* let the legend's lead-name wrap to its own line instead of crushing the theme */
+  .comp-row {
+    grid-template-columns: 10px 1fr auto;
+    row-gap: 2px;
+  }
+  .comp-meta {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    white-space: normal;
   }
   .topbar,
   .detail-hero {

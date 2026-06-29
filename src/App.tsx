@@ -31,6 +31,7 @@ import {
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { buildComparison, type Comparison, type Side } from "./lib/compare";
 import { buildOpportunityOverview, type OpportunityGroup, type OpportunityOverview } from "./lib/opportunities";
+import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline";
@@ -530,6 +531,9 @@ function PortfolioView({
   onSelect: (symbol: string) => void;
 }) {
   const { needsAttention, concentration, compliance, tilt, topOpportunity } = insights;
+  // Roll the owned book up into a primary-theme partition — what the money is actually
+  // betting on, counted once per holding. The full-width band below the ledger.
+  const composition = useMemo(() => buildBookComposition(portfolio), [portfolio]);
   return (
     <div className="portfolio-grid">
       <section className="holdings" aria-label="Your holdings">
@@ -625,7 +629,96 @@ function PortfolioView({
           onClick={() => onSelect(compliance.top?.company.symbol ?? "")}
         />
       </aside>
+
+      {composition.holdingCount > 0 && <BookComposition composition={composition} />}
     </div>
+  );
+}
+
+// Restrained ramp for the composition slices: the lead slice takes the ledger's accent
+// token; the rest step down the skin's cool-grey neutral family in even tonal steps
+// (the first two are the --muted-2 / --faint tokens; the lighter three are interpolated
+// between --faint and the --weight-fill/--tab-border greys to keep the steps regular).
+// The tail past the ramp all shares the faintest grey — those slices are tiny by
+// construction, and each legend row names its theme regardless of colour.
+const SLICE_COLORS = ["var(--accent)", "#737982", "#9aa0a8", "#b9bec6", "#cbd0d7", "#dadde2"];
+function sliceColor(index: number): string {
+  return SLICE_COLORS[Math.min(index, SLICE_COLORS.length - 1)];
+}
+
+// Normalise a slice's measured weight to a share of the counted book. Weights already
+// sum to ~100 (they are portfolio percentages), but a re-import with imperfect weights
+// shouldn't let the slices misrepresent the whole — so the displayed share is always
+// relative to the actual counted total. Falls back to the raw weight if degenerate.
+function pctOfBook(weightPct: number, totalWeightPct: number): number {
+  return totalWeightPct > 0 ? (weightPct / totalWeightPct) * 100 : weightPct;
+}
+
+// The front-page synthesis: what the book is actually betting on, rolled up by theme.
+// The signature is the "spine" — a single proportional bar partitioned by each holding's
+// PRIMARY theme, so every position is counted once and the segments add up to the whole
+// book (an honest partition, never the overlapping >100% theme exposure the opportunities
+// view uses). Drawn in the Ledger's own restrained tokens — hairline-divided segments,
+// a grey ramp with the lead theme in accent — so it reads as part of the ledger, not a
+// foreign chart. The legend below is the accessible, plain-text representation. The
+// rollup math is unit-tested in lib/allocation.ts, so the picture can't drift from the
+// numbers — the thematic synthesis a broker's flat positions list never draws.
+function BookComposition({ composition }: { composition: BookCompositionModel }) {
+  const { slices, themeCount, holdingCount, totalWeightPct, topTheme } = composition;
+  const holdingsWord = holdingCount === 1 ? "holding" : "holdings";
+  const themesWord = themeCount === 1 ? "theme" : "themes";
+  const spineLabel = `Your book split by theme: ${slices
+    .map((slice) => `${prettyTheme(slice.theme)} ${Math.round(pctOfBook(slice.weightPct, totalWeightPct))}%`)
+    .join(", ")}.`;
+
+  return (
+    <section className="book-comp" aria-label="What your book is betting on">
+      <div className="book-comp-head">
+        <h2>What your book is betting on</h2>
+        <span className="ranked">By theme · each counted once</span>
+      </div>
+
+      <p className="book-comp-lead">
+        <strong>{holdingCount}</strong> {holdingsWord} across <strong>{themeCount}</strong> {themesWord}
+        {topTheme && (
+          <>
+            {" — most in "}
+            <strong className="book-comp-top">{prettyTheme(topTheme)}</strong> at{" "}
+            {Math.round(pctOfBook(composition.topWeightPct, totalWeightPct))}%
+          </>
+        )}
+      </p>
+
+      <div className="spine" role="img" aria-label={spineLabel}>
+        {slices.map((slice, index) => (
+          <span
+            key={slice.theme}
+            className="spine-seg"
+            style={{ flexGrow: Math.max(slice.weightPct, 0.001), background: sliceColor(index) }}
+            title={`${prettyTheme(slice.theme)} · ${Math.round(pctOfBook(slice.weightPct, totalWeightPct))}% of your book`}
+          />
+        ))}
+      </div>
+
+      <ul className="comp-legend">
+        {slices.map((slice, index) => (
+          <li className="comp-row" key={slice.theme}>
+            <span className="comp-swatch" style={{ background: sliceColor(index) }} aria-hidden="true" />
+            <span className="comp-theme">{prettyTheme(slice.theme)}</span>
+            <span className="comp-meta">
+              {slice.holdings} {slice.holdings === 1 ? "holding" : "holdings"} · lead {slice.topName}
+            </span>
+            <span className="comp-pct">{Math.round(pctOfBook(slice.weightPct, totalWeightPct))}%</span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="lt-foot">
+        Each holding is counted once, under its primary theme, so the slices add up to your whole book. Weights are
+        measured from your import; the themes are an editorial classification — a synthesis your broker&apos;s flat
+        positions list doesn&apos;t draw.
+      </p>
+    </section>
   );
 }
 
