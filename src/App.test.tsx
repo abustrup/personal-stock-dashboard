@@ -241,7 +241,11 @@ describe("App", () => {
     await screen.findByText(/LIVE · YHOO/i);
 
     fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced Micro Devices.*open detail/i }));
+    // AMD now appears twice in the overview: once in the sized "next moves" deploy
+    // queue and once in the grouped ledger below it. Both open the same detail; click
+    // the last (the grouped ledger row) to exercise the original path.
+    const amdButtons = screen.getAllByRole("button", { name: /Advanced Micro Devices.*open detail/i });
+    fireEvent.click(amdButtons[amdButtons.length - 1]);
 
     // The detail view sizes the position to the per-trade slot, not just the score.
     const plan = screen.getByLabelText(/buy plan for your per-trade slot/i);
@@ -249,6 +253,29 @@ describe("App", () => {
     expect(within(plan).getByText(/≈ 3 shares/i)).toBeInTheDocument();
     expect(within(plan).getByText(/of your DKK 5,000 slot/i)).toBeInTheDocument();
     expect(within(plan).getByText(/of your book/i)).toBeInTheDocument();
+  });
+
+  it("lists a sized deploy queue of the next moves you can act on", async () => {
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        // Two non-owned, affordable names (≈1,380 / 1,242 DKK a share). At least one
+        // isn't the standout hero, so the deploy queue beneath it shows a sized row.
+        AMD: { symbol: "AMD", price: 200, currency: "USD", momentum: 65, asOf: "2026-06-28T18:49:41.386Z" },
+        AVGO: { symbol: "AVGO", price: 180, currency: "USD", momentum: 70, asOf: "2026-06-28T18:49:41.386Z" },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+    const queue = screen.getByLabelText(/more ideas you can act on, sized to your budget/i);
+    expect(within(queue).getByText(/where your next slot could go/i)).toBeInTheDocument();
+    // Every listed move carries a concrete whole-share buy plan, not just a score.
+    expect(within(queue).getAllByText(/≈ \d+ shares?/i).length).toBeGreaterThan(0);
   });
 
   it("marks a market off-platform from the broker settings, and clears it again", () => {

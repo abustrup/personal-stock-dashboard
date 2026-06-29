@@ -1519,6 +1519,178 @@ body > #root {
   cursor: pointer;
 }
 
+/* ---------- deploy queue: "Where your next slot could go" ----------
+   The next-best ideas after the standout, each sized to the per-trade slot. Reads
+   as a ranked ledger: a numbered rank, the name + portfolio fit, a compact slot
+   meter reusing the BuyPlan's green "one slot" vocabulary, then the model score.
+   Quiet by construction — the standout above carries the boldness; this is the
+   disciplined queue beneath it. */
+.next-moves {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-inset);
+  background: var(--card);
+  overflow: hidden;
+}
+.next-moves-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--row-line);
+}
+.next-moves-eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.next-moves-sub {
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.next-moves-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.next-moves-list li + li .next-move {
+  border-top: 1px solid var(--row-line);
+}
+.next-move {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1.4fr) minmax(0, 1.5fr) auto 14px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.next-move:hover {
+  background: var(--inset);
+}
+.next-move-rank {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  text-align: center;
+}
+.next-move-main {
+  min-width: 0;
+}
+.next-move-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.next-move-ticker {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  letter-spacing: 0.02em;
+}
+.next-move-fit {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.next-move-sizing {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.next-move-figure {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.next-move-meter {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: #dceae2;
+  overflow: hidden;
+}
+.next-move-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--up);
+}
+.next-move-cap {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.next-move-aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.next-move-score {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.next-move-today {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.next-move-foot {
+  margin: 0;
+  padding: 9px 16px 11px;
+  border-top: 1px solid var(--row-line);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  background: var(--inset);
+}
+@media (max-width: 640px) {
+  .next-move {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank main aside"
+      ". sizing sizing";
+    row-gap: 8px;
+    column-gap: 12px;
+  }
+  .next-move-rank {
+    grid-area: rank;
+  }
+  .next-move-main {
+    grid-area: main;
+  }
+  .next-move-aside {
+    grid-area: aside;
+  }
+  .next-move-sizing {
+    grid-area: sizing;
+  }
+  .next-move .lt-chev {
+    display: none;
+  }
+}
+
 /* ---------- buy plan: the position sized to your per-trade slot ----------
    The signature is a slot meter — the track is one ~5,000 DKK slot, the fill is
    what whole shares actually consume, and the gap at the right is budget left
@@ -3180,9 +3352,15 @@ body > #root {
 .peer-row:focus-visible,
 .detail-back:focus-visible,
 .market-chip:focus-visible,
-.reach-name:focus-visible {
+.reach-name:focus-visible,
+.next-move:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* The queue rows are full-width inside an overflow-hidden card, so inset the ring
+   (negative offset) — an outer ring would be clipped on the left/right edges. */
+.next-move:focus-visible {
+  outline-offset: -2px;
 }
 .map-dot:focus {
   outline: none;

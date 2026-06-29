@@ -35,6 +35,7 @@ import {
   type StandoutExposure,
 } from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
+import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
@@ -271,6 +272,17 @@ export default function App() {
     const plan = planPosition(investability, model.totalMarketValueDkk);
     return { rec: standout, skipped: standoutSkipped, investability, exposure, plan };
   }, [model.opportunities, model.portfolio, model.totalMarketValueDkk, oppInvestableSet, investabilityFor]);
+  // The deploy queue beneath the standout: the next-best ideas you can concretely
+  // buy now, each sized to your per-trade slot. Built from the full opportunity set
+  // (same as the standout and reach panel) and excludes the standout itself, which
+  // is already the hero above. Same investability resolver, so the gate matches.
+  const nextMoves = useMemo<NextMove[]>(
+    () =>
+      buildNextMoves(model.opportunities, investabilityFor, model.portfolio, model.totalMarketValueDkk, {
+        excludeSymbol: nextBuy?.rec.company.symbol,
+      }),
+    [model.opportunities, model.portfolio, model.totalMarketValueDkk, investabilityFor, nextBuy?.rec.company.symbol],
+  );
   // Markets present in the curated universe — the toggle set the user picks from.
   // Drop editorial placeholders that aren't real public venues (private/pre-IPO
   // proxies, unknown imports) so the control only lists markets a broker can map to.
@@ -421,6 +433,7 @@ export default function App() {
             overview={opportunityOverview}
             summary={investSummary}
             reach={reach}
+            nextMoves={nextMoves}
             settings={brokerSettings}
             markets={knownMarkets}
             onChangeSettings={updateBrokerSettings}
@@ -1367,6 +1380,7 @@ function OpportunitiesOverview({
   overview,
   summary,
   reach,
+  nextMoves,
   settings,
   markets,
   onChangeSettings,
@@ -1382,6 +1396,7 @@ function OpportunitiesOverview({
   overview: OpportunityOverview;
   summary: InvestabilitySummary;
   reach: ReachBreakdown;
+  nextMoves: NextMove[];
   settings: BrokerSettings;
   markets: string[];
   onChangeSettings: (next: BrokerSettings) => void;
@@ -1464,6 +1479,8 @@ function OpportunitiesOverview({
           off-limits for your account — this is the strongest one you can actually act on.
         </p>
       )}
+
+      <NextMoves moves={nextMoves} onSelect={onSelect} />
 
       <ReachPanel
         summary={summary}
@@ -1748,6 +1765,105 @@ function standoutFit(exposure: OpportunityOverview["standoutExposure"]): string 
   }
   const holdings = `${exposure.ownedCount} ${exposure.ownedCount === 1 ? "holding" : "holdings"}`;
   return `Adds to your ${prettyTheme(exposure.theme)} tilt — already ${holdings}, ${exposure.ownedWeightPct.toFixed(0)}% of your book.`;
+}
+
+// The deploy queue: after the single standout hero, the next-best ideas you can
+// CONCRETELY act on — each already sized to your per-trade slot as a whole-share
+// buy plan. The grouped ledger below shows every name with only a score and a
+// badge; this turns the strongest few into a ranked shortlist of actual moves
+// (how many shares, what DKK, what fraction of the slot), gated to what your
+// broker can trade at your budget. Ranks continue past the standout (2, 3, …), so
+// the number is the true score order of the ideas you can buy. The whole list is
+// built by the tested lib/nextMoves from the same investability/sizing helpers the
+// standout uses, so it can never disagree. Renders nothing when no priced,
+// in-reach idea remains — honest, never a fake or unsized row.
+function NextMoves({ moves, onSelect }: { moves: NextMove[]; onSelect: (symbol: string) => void }) {
+  if (moves.length === 0) return null;
+  return (
+    <section className="next-moves" aria-label="More ideas you can act on, sized to your budget">
+      <div className="next-moves-head">
+        <span className="next-moves-eyebrow">↳ Where your next slot could go</span>
+        <span className="next-moves-sub">Ranked by score · sized to your per-trade budget</span>
+      </div>
+      <ol className="next-moves-list">
+        {moves.map((move) => (
+          <NextMoveRow key={move.rec.company.symbol} move={move} onSelect={onSelect} />
+        ))}
+      </ol>
+      <p className="next-moves-foot">
+        Ranked by the model&apos;s own score among the ideas you can actually buy — on a market your broker trades, at
+        your budget. Whole-share plans are sized from the measured price (approximate FX for non-DKK); they never touch
+        the score.
+      </p>
+    </section>
+  );
+}
+
+// One row of the deploy queue: a ledger line that reads rank · name · sized buy
+// plan · score/today. The signature is the compact slot meter — the same green
+// "one slot" vocabulary as the full BuyPlan, shrunk to a single line so the rows
+// scan as a queue. Every row is a button into the company detail.
+function NextMoveRow({ move, onSelect }: { move: NextMove; onSelect: (symbol: string) => void }) {
+  const { rec, plan, exposure, rank } = move;
+  const { company } = rec;
+  const todayPct = company.market?.dayChangePct;
+  const fillPct = Math.min(100, Math.round(plan.budgetUse * 100));
+  const ofBook = bookPctLabel(plan.bookFraction);
+  return (
+    <li>
+      <button
+        type="button"
+        className="next-move"
+        onClick={() => onSelect(company.symbol)}
+        aria-label={`Number ${rank}: ${company.name}, score ${rec.score}, ${rec.action}, ${planHeadline(plan)} — open detail`}
+      >
+        <span className="next-move-rank" aria-hidden="true">
+          {rank}
+        </span>
+        <span className="next-move-main">
+          <span className="next-move-name">
+            {company.name} <span className="next-move-ticker">{company.symbol}</span>
+            {rec.compliance.status !== "unknown" && (
+              <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
+            )}
+          </span>
+          <span className="next-move-fit">{moveFit(exposure)}</span>
+        </span>
+        <span className="next-move-sizing">
+          <span className="next-move-figure">{planHeadline(plan)}</span>
+          <span className="next-move-meter" aria-hidden="true">
+            <span className="next-move-fill" style={{ width: `${fillPct}%` }} />
+          </span>
+          <span className="next-move-cap">
+            {fillPct}% of slot{ofBook ? ` · ~${ofBook} of book` : ""}
+          </span>
+        </span>
+        <span className="next-move-aside">
+          <span className="next-move-verdict">
+            <Action action={rec.action} />
+          </span>
+          <span className="next-move-score">
+            <span className="lt-score-num">{rec.score}</span>
+            {todayPct !== undefined && (
+              <span className={`next-move-today ${toneClass(todayPct)}`}>{formatSignedPct(todayPct)}</span>
+            )}
+          </span>
+        </span>
+        <span className="lt-chev" aria-hidden="true">
+          ›
+        </span>
+      </button>
+    </li>
+  );
+}
+
+// The compact portfolio-fit line for a queue row: opens new ground (a theme you
+// hold nothing in) or adds to a tilt you can quantify — the same honest framing as
+// the standout, shortened to one scannable clause.
+function moveFit(exposure?: StandoutExposure): string {
+  if (!exposure) return "Outside your current book";
+  if (exposure.isGap) return `Opens new ground · ${prettyTheme(exposure.theme)}`;
+  return `Adds to ${prettyTheme(exposure.theme)} · already ${exposure.ownedWeightPct.toFixed(0)}% of book`;
 }
 
 // The decision map: every name on one risk/reward plane — your holdings (filled,
