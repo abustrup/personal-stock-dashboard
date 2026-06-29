@@ -113,6 +113,41 @@ describe("buildOpportunityOverview", () => {
     expect(result.standoutExposure?.isGap).toBe(false);
   });
 
+  it("skips higher-scoring off-limits ideas to lead with one you can act on", () => {
+    const opportunities = [
+      rec({ symbol: "OFF1", action: "investigate", score: 95, company: { themes: ["memory"] } }),
+      rec({ symbol: "OFF2", action: "investigate", score: 90, company: { themes: ["space"] } }),
+      rec({ symbol: "BUYABLE", action: "investigate", score: 82, company: { themes: ["ai-platform"] } }),
+    ];
+    // Only BUYABLE clears the broker/budget gates.
+    const result = buildOpportunityOverview([], opportunities, new Set(["BUYABLE"]));
+    expect(result.standout?.company.symbol).toBe("BUYABLE");
+    // The two higher-scoring names were passed over because they're off-limits.
+    expect(result.standoutSkipped).toBe(2);
+  });
+
+  it("keeps the top idea as standout when it is itself investable", () => {
+    const opportunities = [
+      rec({ symbol: "TOP", action: "investigate", score: 95, company: { themes: ["memory"] } }),
+      rec({ symbol: "NEXT", action: "investigate", score: 80, company: { themes: ["space"] } }),
+    ];
+    const result = buildOpportunityOverview([], opportunities, new Set(["TOP", "NEXT"]));
+    expect(result.standout?.company.symbol).toBe("TOP");
+    expect(result.standoutSkipped).toBe(0);
+  });
+
+  it("falls back to the top idea when nothing is investable, without skipping silently", () => {
+    const opportunities = [
+      rec({ symbol: "OFF1", action: "investigate", score: 95, company: { themes: ["memory"] } }),
+      rec({ symbol: "OFF2", action: "investigate", score: 80, company: { themes: ["space"] } }),
+    ];
+    const result = buildOpportunityOverview([], opportunities, new Set());
+    // No investable idea exists, so the hero falls back to the best overall...
+    expect(result.standout?.company.symbol).toBe("OFF1");
+    // ...and standoutSkipped stays 0 (the fallback isn't "skipping" to a buyable one).
+    expect(result.standoutSkipped).toBe(0);
+  });
+
   it("handles an empty opportunity set without inventing groups", () => {
     const result = buildOpportunityOverview([rec({ symbol: "OWN", weight: 50 })], []);
     expect(result.groups).toEqual([]);
