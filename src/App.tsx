@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   Compass,
   FileUp,
+  GitCompareArrows,
   Radar,
   RotateCcw,
   ScatterChart,
@@ -28,6 +29,7 @@ import {
   type PlaneDims,
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
+import { buildComparison, type Comparison, type Side } from "./lib/compare";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline";
@@ -36,12 +38,13 @@ import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
 import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
-type View = "portfolio" | "opportunities" | "map" | "detail";
+type View = "portfolio" | "opportunities" | "map" | "compare" | "detail";
 
 const tabs: Array<{ id: View; label: string; icon: typeof BriefcaseBusiness }> = [
   { id: "portfolio", label: "Portfolio", icon: BriefcaseBusiness },
   { id: "opportunities", label: "Opportunities", icon: Radar },
   { id: "map", label: "Map", icon: ScatterChart },
+  { id: "compare", label: "Compare", icon: GitCompareArrows },
   { id: "detail", label: "Company", icon: Search },
 ];
 
@@ -59,6 +62,8 @@ export default function App() {
   );
   const [view, setView] = useState<View>("portfolio");
   const [selectedSymbol, setSelectedSymbol] = useState<string | undefined>(holdings[0]?.symbol);
+  const [compareA, setCompareA] = useState<string | undefined>();
+  const [compareB, setCompareB] = useState<string | undefined>();
   const [externalSignals, setExternalSignals] = useState<ExternalSignalSnapshot>({});
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshotMap>({});
   const [dataAsOf, setDataAsOf] = useState<string | undefined>();
@@ -105,6 +110,20 @@ export default function App() {
   const peerComparison = useMemo(
     () => (selected ? buildPeerComparison(model.all, selected.company.symbol) : undefined),
     [model.all, selected?.company.symbol],
+  );
+
+  // Resolve the two names being compared. Defaults pose the natural question a
+  // broker can't answer — your top holding against the best idea you don't own —
+  // and fall back gracefully if a chosen symbol is gone after a re-import.
+  const leftRec =
+    model.all.find((rec) => rec.company.symbol === compareA) ?? model.portfolio[0] ?? model.all[0];
+  const rightRec =
+    model.all.find((rec) => rec.company.symbol === compareB) ??
+    model.opportunities.find((rec) => rec.company.symbol !== leftRec?.company.symbol) ??
+    model.all.find((rec) => rec.company.symbol !== leftRec?.company.symbol);
+  const comparison = useMemo(
+    () => (leftRec && rightRec ? buildComparison(leftRec, rightRec) : undefined),
+    [leftRec, rightRec],
   );
 
   function open(symbol: string | undefined) {
@@ -276,6 +295,21 @@ export default function App() {
           portfolio={model.portfolio}
           opportunities={model.opportunities}
           opportunityLimit={MAP_OPPORTUNITY_LIMIT}
+          onSelect={open}
+        />
+      )}
+      {view === "compare" && leftRec && rightRec && comparison && (
+        <CompareView
+          left={leftRec}
+          right={rightRec}
+          comparison={comparison}
+          options={model.all}
+          onChangeLeft={setCompareA}
+          onChangeRight={setCompareB}
+          onSwap={() => {
+            setCompareA(rightRec.company.symbol);
+            setCompareB(leftRec.company.symbol);
+          }}
           onSelect={open}
         />
       )}
@@ -588,6 +622,217 @@ function mapTone(action: Recommendation["action"]): string {
   if (action === "hold" || action === "watch") return "hold";
   if (action === "trim") return "trim";
   return "avoid";
+}
+
+// The head-to-head Compare view: two names on one "tale of the tape". The
+// signature is the diverging axis chart — each scoring driver mirrored across a
+// centre spine, the leader's bar in the accent, the trailing one muted — so you
+// can read at a glance who wins each axis. The call a broker dashboard can't
+// make: it has no model score, and only ever shows what you already own. Every
+// number is the model's own (reused from the dashboard recommendations), so the
+// comparison can never disagree with the detail view; the synthesis logic and
+// axis math are unit-tested in lib/compare.ts.
+function CompareView({
+  left,
+  right,
+  comparison,
+  options,
+  onChangeLeft,
+  onChangeRight,
+  onSwap,
+  onSelect,
+}: {
+  left: Recommendation;
+  right: Recommendation;
+  comparison: Comparison;
+  options: Recommendation[];
+  onChangeLeft: (symbol: string) => void;
+  onChangeRight: (symbol: string) => void;
+  onSwap: () => void;
+  onSelect: (symbol: string) => void;
+}) {
+  const sameName = left.company.symbol === right.company.symbol;
+  return (
+    <section className="panel compare-panel" aria-label="Compare two names">
+      <div className="panel-heading">
+        <div>
+          <h2>Compare</h2>
+          <span>Two names, head to head — the call your broker can&apos;t make</span>
+        </div>
+      </div>
+
+      <div className="cmp-pickers">
+        <CompanyPicker label="First name" value={left.company.symbol} options={options} onChange={onChangeLeft} />
+        <button type="button" className="cmp-swap" onClick={onSwap} aria-label="Swap the two names">
+          <GitCompareArrows aria-hidden="true" size={16} />
+          <span>Swap</span>
+        </button>
+        <CompanyPicker label="Second name" value={right.company.symbol} options={options} onChange={onChangeRight} />
+      </div>
+
+      {sameName ? (
+        <p className="empty">Pick two different names to compare them.</p>
+      ) : (
+        <>
+          <div className="cmp-cards">
+            <CompareCard rec={left} side="a" leader={comparison.leader} onSelect={onSelect} />
+            <span className="cmp-versus" aria-hidden="true">
+              vs
+            </span>
+            <CompareCard rec={right} side="b" leader={comparison.leader} onSelect={onSelect} />
+          </div>
+
+          <TaleOfTheTape comparison={comparison} leftName={left.company.name} rightName={right.company.name} />
+
+          <p className={`cmp-verdict ${comparison.leader}`}>{comparison.verdict}</p>
+          <p className="estimate-note">
+            Bars are the model&apos;s own 0–100 driver levels, higher is better (valuation and balance-sheet risk
+            inverted). An axis reads <em>measured</em> only when both names have fetched data; otherwise at least one
+            side is an editorial estimate. Score and action are the same the rest of the dashboard shows.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function CompanyPicker({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Recommendation[];
+  onChange: (symbol: string) => void;
+}) {
+  const owned = options.filter((rec) => rec.holding);
+  const ideas = options.filter((rec) => !rec.holding);
+  return (
+    <label className="cmp-picker">
+      <span className="cmp-picker-label">{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {owned.length > 0 && (
+          <optgroup label="Your holdings">
+            {owned.map((rec) => (
+              <option key={rec.company.symbol} value={rec.company.symbol}>
+                {rec.company.name} · score {rec.score}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {ideas.length > 0 && (
+          <optgroup label="Opportunities you don't own">
+            {ideas.map((rec) => (
+              <option key={rec.company.symbol} value={rec.company.symbol}>
+                {rec.company.name} · score {rec.score}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+    </label>
+  );
+}
+
+function CompareCard({
+  rec,
+  side,
+  leader,
+  onSelect,
+}: {
+  rec: Recommendation;
+  side: Side;
+  leader: Side;
+  onSelect: (symbol: string) => void;
+}) {
+  const { company, holding, compliance } = rec;
+  const isLeader = leader === side;
+  return (
+    <button
+      type="button"
+      className={`cmp-card ${isLeader ? "is-leader" : ""}`}
+      onClick={() => onSelect(company.symbol)}
+      aria-label={`${company.name}, score ${rec.score}, ${rec.action}${isLeader ? ", the model's pick" : ""} — open detail`}
+    >
+      {isLeader && <span className="cmp-pick">Model&apos;s pick</span>}
+      <ScoreRing score={rec.score} action={rec.action} />
+      <strong className="cmp-card-name">{company.name}</strong>
+      <span className="cmp-card-sym">
+        {company.symbol} · {holding ? "you own it" : "opportunity"}
+      </span>
+      <div className="cmp-card-meta">
+        <Action action={rec.action} />
+        {compliance.status !== "unknown" && (
+          <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
+        )}
+      </div>
+      {holding ? (
+        <span className={`cmp-card-return ${toneClass(holding.totalReturnPct)}`}>
+          {formatSignedPct(holding.totalReturnPct)} total · from Saxo
+        </span>
+      ) : company.market?.dayChangePct !== undefined ? (
+        <span className={`cmp-card-return ${toneClass(company.market.dayChangePct)}`}>
+          {formatSignedPct(company.market.dayChangePct)} today
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+// The signature element: each driver mirrored across a centre spine. The leading
+// side's bar and value carry the accent; the trailing side is muted; a tie keeps
+// both quiet. Reads as a stat sheet, not chartjunk — one row per axis, the gap is
+// the story.
+function TaleOfTheTape({
+  comparison,
+  leftName,
+  rightName,
+}: {
+  comparison: Comparison;
+  leftName: string;
+  rightName: string;
+}) {
+  return (
+    <div className="tape" role="table" aria-label={`Driver comparison: ${leftName} versus ${rightName}`}>
+      <div className="tape-head" role="row">
+        <span className="tape-head-a" role="columnheader">
+          {leftName}
+        </span>
+        <span className="tape-head-axis" role="columnheader" aria-hidden="true" />
+        <span className="tape-head-b" role="columnheader">
+          {rightName}
+        </span>
+      </div>
+      {comparison.axes.map((axis) => (
+        <div className="tape-row" role="row" key={axis.label}>
+          <span className={`tape-val a ${axis.leader === "a" ? "lead" : ""}`} role="cell">
+            {axis.a}
+          </span>
+          <span className="tape-track a" aria-hidden="true">
+            <span
+              className={`tape-fill ${axis.leader === "a" ? "lead" : axis.leader === "b" ? "trail" : "tie"}`}
+              style={{ width: `${axis.a}%` }}
+            />
+          </span>
+          <span className="tape-axis" role="rowheader">
+            {axis.label}
+            <em>{axis.provenance}</em>
+          </span>
+          <span className="tape-track b" aria-hidden="true">
+            <span
+              className={`tape-fill ${axis.leader === "b" ? "lead" : axis.leader === "a" ? "trail" : "tie"}`}
+              style={{ width: `${axis.b}%` }}
+            />
+          </span>
+          <span className={`tape-val b ${axis.leader === "b" ? "lead" : ""}`} role="cell">
+            {axis.b}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function CompanyDetail({

@@ -113,6 +113,40 @@ describe("App", () => {
     expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
   });
 
+  it("compares two names head to head with a tale-of-the-tape and a verdict", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Compare$/ }));
+
+    const panel = screen.getByLabelText(/compare two names/i);
+    // Two pickers, defaulting to one name vs another.
+    expect(within(panel).getAllByRole("combobox")).toHaveLength(2);
+
+    // The diverging chart lists every scoring driver as its own row.
+    const tape = within(panel).getByRole("table", { name: /driver comparison/i });
+    for (const axis of [/AI exposure/i, /Growth/i, /Momentum/i, /Quality/i, /Value/i, /Balance sheet/i]) {
+      expect(within(tape).getByRole("rowheader", { name: axis })).toBeInTheDocument();
+    }
+
+    // A one-line synthesis states the model's lean (or an honest tie/block).
+    expect(
+      within(panel).getByText(/the model leans|too close to call|blocked by eifo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("re-runs the comparison when you pick a different name", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Compare$/ }));
+    const panel = screen.getByLabelText(/compare two names/i);
+    const [first] = within(panel).getAllByRole("combobox");
+
+    // AAPL is a demo holding, so it is always selectable on the left.
+    fireEvent.change(first, { target: { value: "AAPL" } });
+    expect((first as HTMLSelectElement).value).toBe("AAPL");
+    expect(within(panel).getAllByText(/Apple/i).length).toBeGreaterThan(0);
+  });
+
   it("falls back to an editorial-only label when no snapshot loads", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no server")));
     render(<App />);
