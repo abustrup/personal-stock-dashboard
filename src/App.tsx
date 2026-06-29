@@ -5,6 +5,7 @@ import {
   FileUp,
   Radar,
   RotateCcw,
+  ScatterChart,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -16,6 +17,16 @@ import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
 import { buildDashboardModel } from "./lib/dashboard";
 import { buildInsights, RISK_FACTORS, type HoldingContext, type RiskFactor } from "./lib/insights";
+import {
+  buildMapPoints,
+  markerRadius,
+  projectPoint,
+  QUADRANT_LABELS,
+  RISK_MIDLINE,
+  SCORE_MIDLINE,
+  type MapPoint,
+  type PlaneDims,
+} from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { scoreContributions } from "./lib/recommendations";
@@ -23,13 +34,19 @@ import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
 import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
-type View = "portfolio" | "opportunities" | "detail";
+type View = "portfolio" | "opportunities" | "map" | "detail";
 
 const tabs: Array<{ id: View; label: string; icon: typeof BriefcaseBusiness }> = [
   { id: "portfolio", label: "Portfolio", icon: BriefcaseBusiness },
   { id: "opportunities", label: "Opportunities", icon: Radar },
+  { id: "map", label: "Map", icon: ScatterChart },
   { id: "detail", label: "Company", icon: Search },
 ];
+
+// How many non-owned opportunities to plot on the decision map. Owned holdings
+// are always all shown; opportunities are ranked and capped so the plane stays
+// legible — the count actually shown vs. available is surfaced in the UI.
+const MAP_OPPORTUNITY_LIMIT = 14;
 
 const stored = loadPortfolio();
 
@@ -248,6 +265,14 @@ export default function App() {
           onSelect={open}
         />
       )}
+      {view === "map" && (
+        <DecisionMap
+          portfolio={model.portfolio}
+          opportunities={model.opportunities}
+          opportunityLimit={MAP_OPPORTUNITY_LIMIT}
+          onSelect={open}
+        />
+      )}
       {view === "detail" && selected && (
         <CompanyDetail
           recommendation={selected}
@@ -355,6 +380,206 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
       </div>
     </button>
   );
+}
+
+// The decision map: every name on one risk/reward plane — your holdings (filled,
+// sized by weight) and the opportunities you don't own (hollow). The synthesis a
+// broker can't draw: it only ever shows what you already hold. Score (x) is the
+// model's own; risk (y) is the mean of the valuation, balance-sheet and
+// geopolitical axes. Pure SVG, no chart dependency; the projection/quadrant math
+// is unit-tested in lib/map.ts so the picture can't drift from the numbers.
+function DecisionMap({
+  portfolio,
+  opportunities,
+  opportunityLimit,
+  onSelect,
+}: {
+  portfolio: Recommendation[];
+  opportunities: Recommendation[];
+  opportunityLimit: number;
+  onSelect: (symbol: string) => void;
+}) {
+  const shownOpportunities = opportunities.slice(0, opportunityLimit);
+  const points = buildMapPoints(portfolio, shownOpportunities);
+  const ownedCount = portfolio.length;
+
+  if (points.length === 0) {
+    return (
+      <section className="panel" aria-label="Decision map">
+        <div className="panel-heading">
+          <div>
+            <h2>Decision map</h2>
+            <span>Score against risk — your book and the field on one plane</span>
+          </div>
+        </div>
+        <p className="empty">Import a portfolio to map it against the opportunity set.</p>
+      </section>
+    );
+  }
+
+  const dims: PlaneDims = { width: 720, height: 460, padX: 54, padY: 40 };
+  const left = dims.padX;
+  const right = dims.width - dims.padX;
+  const top = dims.padY;
+  const bottom = dims.height - dims.padY;
+  const midX = projectPoint(SCORE_MIDLINE, 0, dims).x;
+  const midY = projectPoint(0, RISK_MIDLINE, dims).y;
+
+  const maxWeight = portfolio.reduce(
+    (max, rec) => Math.max(max, rec.holding?.portfolioWeight ?? 0),
+    0,
+  );
+  const scale = { minR: 5, maxR: 15, maxWeight };
+
+  // Draw opportunities first so owned holdings (filled, labelled) sit on top.
+  const ordered = [...points].sort((a, b) => Number(a.owned) - Number(b.owned));
+
+  return (
+    <section className="panel map-panel" aria-label="Decision map">
+      <div className="panel-heading">
+        <div>
+          <h2>Decision map</h2>
+          <span>Score against risk — your book and the field on one plane</span>
+        </div>
+        <span className="count">{points.length}</span>
+      </div>
+
+      <div className="map-frame">
+        <svg
+          className="map-svg"
+          viewBox={`0 0 ${dims.width} ${dims.height}`}
+          role="group"
+          aria-label={`Risk-reward map of ${ownedCount} holdings and ${shownOpportunities.length} opportunities`}
+        >
+          {/* The one tinted region: where you want names to land (strong & steady). */}
+          <rect className="map-quadrant" x={midX} y={midY} width={right - midX} height={bottom - midY} />
+
+          {/* Plane frame + midlines */}
+          <rect className="map-plane" x={left} y={top} width={right - left} height={bottom - top} />
+          <line className="map-mid" x1={midX} y1={top} x2={midX} y2={bottom} />
+          <line className="map-mid" x1={left} y1={midY} x2={right} y2={midY} />
+
+          {/* Quadrant labels in their corners (structure carries meaning) */}
+          <text className="map-quad-label" x={right - 8} y={bottom - 8} textAnchor="end">
+            {QUADRANT_LABELS["strong-steady"]}
+          </text>
+          <text className="map-quad-label" x={right - 8} y={top + 14} textAnchor="end">
+            {QUADRANT_LABELS["strong-risky"]}
+          </text>
+          <text className="map-quad-label" x={left + 8} y={bottom - 8}>
+            {QUADRANT_LABELS["low-priority"]}
+          </text>
+          <text className="map-quad-label" x={left + 8} y={top + 14}>
+            {QUADRANT_LABELS["avoid-zone"]}
+          </text>
+
+          {/* Axis cues */}
+          <text className="map-axis" x={(left + right) / 2} y={dims.height - 10} textAnchor="middle">
+            Model score →
+          </text>
+          <text className="map-axis-end" x={left} y={dims.height - 10} textAnchor="start">
+            weaker
+          </text>
+          <text className="map-axis-end" x={right} y={dims.height - 10} textAnchor="end">
+            stronger
+          </text>
+          <text
+            className="map-axis"
+            x={16}
+            y={(top + bottom) / 2}
+            textAnchor="middle"
+            transform={`rotate(-90 16 ${(top + bottom) / 2})`}
+          >
+            Risk ↑
+          </text>
+
+          {ordered.map((point) => (
+            <MapMarker key={point.symbol} point={point} dims={dims} scale={scale} onSelect={onSelect} />
+          ))}
+        </svg>
+      </div>
+
+      <div className="map-legend">
+        <span className="map-key">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle className="map-swatch fill" cx="8" cy="8" r="6" />
+          </svg>
+          Holdings — sized by weight
+        </span>
+        <span className="map-key">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle className="map-swatch hollow" cx="8" cy="8" r="5.5" />
+          </svg>
+          Opportunities you don&apos;t own
+        </span>
+        <span className="map-key map-key-actions" aria-hidden="true">
+          <i className="map-chip go" /> increase
+          <i className="map-chip hold" /> hold
+          <i className="map-chip trim" /> trim
+          <i className="map-chip avoid" /> avoid
+        </span>
+      </div>
+
+      <p className="estimate-note">
+        Plotting your {ownedCount} {ownedCount === 1 ? "holding" : "holdings"} and the top{" "}
+        {shownOpportunities.length} of {opportunities.length} opportunities. Score is the model&apos;s; risk is the
+        mean of the valuation and balance-sheet axes (measured once fundamentals are fetched, editorial
+        otherwise) and the geopolitical axis (always editorial). A dashed ring marks an EIFO compliance flag.
+      </p>
+    </section>
+  );
+}
+
+function MapMarker({
+  point,
+  dims,
+  scale,
+  onSelect,
+}: {
+  point: MapPoint;
+  dims: PlaneDims;
+  scale: { minR: number; maxR: number; maxWeight: number };
+  onSelect: (symbol: string) => void;
+}) {
+  const { x, y } = projectPoint(point.score, point.risk, dims);
+  const r = markerRadius(point, scale);
+  const flagged = point.compliance !== "unknown";
+  const label = `${point.name}: ${point.action}, score ${point.score}, risk ${point.risk}, ${
+    point.owned ? `${point.weightPct.toFixed(1)}% of your book` : "not owned"
+  }${flagged ? `, EIFO ${point.compliance.replace("_", " ")}` : ""}`;
+  return (
+    <g
+      className={`map-dot ${mapTone(point.action)} ${point.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onClick={() => onSelect(point.symbol)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(point.symbol);
+        }
+      }}
+    >
+      <title>{label}</title>
+      {flagged && <circle className="map-flag-ring" cx={x} cy={y} r={r + 3.5} />}
+      <circle className={point.owned ? "map-mark fill" : "map-mark hollow"} cx={x} cy={y} r={r} />
+      {point.owned && (
+        <text className="map-mark-label" x={x + r + 3} y={y + 3.5}>
+          {point.symbol}
+        </text>
+      )}
+    </g>
+  );
+}
+
+// Map an action to a colour tone class. Namespaced (go/hold/trim/avoid) so it
+// never collides with the global action-pill colour classes of the same name.
+function mapTone(action: Recommendation["action"]): string {
+  if (action === "increase" || action === "investigate") return "go";
+  if (action === "hold" || action === "watch") return "hold";
+  if (action === "trim") return "trim";
+  return "avoid";
 }
 
 function CompanyDetail({
