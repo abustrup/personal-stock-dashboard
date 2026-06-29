@@ -1822,6 +1822,98 @@ h1 {
   font-weight: 600;
 }
 
+/* ---------- buy plan: the position sized to your per-trade slot ----------
+   The signature is a slot meter — the track is one ~5,000 DKK slot, the fill is
+   what whole shares actually consume, and the gap at the right is budget left
+   stranded by whole-share rounding. An over-budget name overflows the track with
+   a hazard notch: one share alone already exceeds the slot. */
+.buy-plan {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 11px 13px;
+  border: 1px solid #cfe6da;
+  border-radius: 12px;
+  background: #f1f8f4;
+}
+.buy-plan.detail {
+  margin-top: 10px;
+}
+.buy-plan.over {
+  border-color: #e2dcc8;
+  background: #f7f4ea;
+}
+.buy-plan-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.buy-plan-eyebrow {
+  flex: none;
+  color: var(--accent);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.buy-plan.over .buy-plan-eyebrow {
+  color: #5a5640;
+}
+.buy-plan-figure {
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+.buy-plan-meter {
+  display: block;
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: #dceae2;
+  overflow: hidden;
+}
+.buy-plan.over .buy-plan-meter {
+  background: #ece5d2;
+  overflow: visible;
+}
+.buy-plan-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--up);
+}
+.buy-plan.over .buy-plan-fill {
+  background: #b08a2e;
+}
+.buy-plan-over {
+  position: absolute;
+  top: -2px;
+  right: -7px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--down);
+  background: repeating-linear-gradient(-45deg, var(--down), var(--down) 2px, transparent 2px, transparent 4px);
+}
+.buy-plan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+.buy-plan-book {
+  flex: none;
+  font-weight: 600;
+  color: #54584f;
+}
+
 /* ---------- broker & budget settings bar ---------- */
 .broker-bar {
   margin: 0 0 18px;

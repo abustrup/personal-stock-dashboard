@@ -53,6 +53,7 @@ import {
   type InvestabilitySummary,
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
+import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
 import {
   addWatchEntry,
   loadWatchlist,
@@ -186,6 +187,15 @@ export default function App() {
   const investSummary: InvestabilitySummary = useMemo(
     () => summarizeInvestability(model.opportunities, brokerSettings),
     [model.opportunities, brokerSettings],
+  );
+  // The concrete buy plan for the best idea you can act on — sized to the per-trade
+  // slot and the current book — so the front-page card states shares, not just a name.
+  const topInvestablePlan = useMemo(
+    () =>
+      investSummary.topInvestable
+        ? planPosition(investabilityFor(investSummary.topInvestable.company), model.totalMarketValueDkk)
+        : undefined,
+    [investSummary.topInvestable, investabilityFor, model.totalMarketValueDkk],
   );
   const visibleOpportunities = useMemo(
     () => (hideOffLimits ? model.opportunities.filter((rec) => oppInvestableSet.has(rec.company.symbol)) : model.opportunities),
@@ -354,7 +364,7 @@ export default function App() {
             tone={investSummary.offPlatform + investSummary.aboveBudget > 0 ? "neutral" : "calm"}
             label="Investable now"
             value={`${investSummary.investable} of ${investSummary.total}`}
-            detail={investableDetail(investSummary)}
+            detail={investableDetail(investSummary, topInvestablePlan)}
             onClick={() => setView("opportunities")}
           />
         </div>
@@ -399,6 +409,7 @@ export default function App() {
           summary={investSummary}
           settings={brokerSettings}
           investabilityFor={investabilityFor}
+          bookValueDkk={model.totalMarketValueDkk}
           hideOffLimits={hideOffLimits}
           onToggleOffLimits={setHideOffLimits}
           watchlist={watchlist}
@@ -437,6 +448,7 @@ export default function App() {
           context={insights.holdingContexts.get(selected.company.symbol)}
           peers={peerComparison}
           investability={selected.holding ? undefined : investabilityFor(selected.company)}
+          bookValueDkk={model.totalMarketValueDkk}
           onSelect={open}
         />
       )}
@@ -498,15 +510,54 @@ function InvestabilityBadge({ investability }: { investability: Investability })
   );
 }
 
+// The buy plan: the step a broker's "buying power" readout skips. The owner buys
+// in fixed ~5,000 DKK slots and only whole shares, so the signature here is a slot
+// meter — the track is one per-trade slot, the fill is what whole shares actually
+// consume, and the gap to the right is budget left stranded by whole-share rounding.
+// An over-budget name overflows the track (one share already exceeds the slot).
+// Sizing is approximate (measured price, approximate FX); it never touches the score.
+function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "detail" }) {
+  const over = plan.status === "over";
+  const fillPct = Math.min(100, Math.round(plan.budgetUse * 100));
+  const ofBook = bookPctLabel(plan.bookFraction);
+  const slotLabel = over
+    ? `${plan.slotMultiple >= 10 ? "10+" : plan.slotMultiple.toFixed(1)}× your DKK ${formatNumber(plan.budgetDkk)} slot`
+    : `of your DKK ${formatNumber(plan.budgetDkk)} slot`;
+  // Built from <span>s (phrasing content) so the meter stays valid markup even as a
+  // descendant of the clickable standout <button>; layout comes from CSS display.
+  return (
+    <span className={`buy-plan ${variant}${over ? " over" : ""}`} role="group" aria-label="Buy plan for your per-trade slot">
+      <span className="buy-plan-head">
+        <span className="buy-plan-eyebrow">{over ? "Doesn’t fit your slot" : "Buy plan"}</span>
+        <strong className="buy-plan-figure">{planHeadline(plan)}</strong>
+      </span>
+      <span className="buy-plan-meter" aria-hidden="true">
+        <span className="buy-plan-fill" style={{ width: `${fillPct}%` }} />
+        {over && <span className="buy-plan-over" />}
+      </span>
+      <span className="buy-plan-foot">
+        <span>{over ? slotLabel : `${fillPct}% ${slotLabel}`}</span>
+        {ofBook && <span className="buy-plan-book">~{ofBook} of your book</span>}
+      </span>
+    </span>
+  );
+}
+
 // The one-line detail under the front-page "Investable now" card. Honest in both
 // directions: it leads with what's blocked when anything is, and otherwise names
 // the best idea you can act on right now.
-function investableDetail(summary: InvestabilitySummary): string {
+function investableDetail(summary: InvestabilitySummary, topPlan?: PositionPlan): string {
   const parts: string[] = [];
   if (summary.offPlatform > 0) parts.push(`${summary.offPlatform} off Saxo`);
   if (summary.aboveBudget > 0) parts.push(`${summary.aboveBudget} over budget`);
   if (parts.length === 0) {
-    return summary.topInvestable ? `All in reach · best: ${summary.topInvestable.company.name}` : "No ideas to act on yet";
+    if (!summary.topInvestable) return "No ideas to act on yet";
+    const name = summary.topInvestable.company.name;
+    if (topPlan && topPlan.status === "fits") {
+      const ofBook = bookPctLabel(topPlan.bookFraction);
+      return `${name} · ≈${formatNumber(topPlan.shares)} sh${ofBook ? ` · ~${ofBook} of book` : ""}`;
+    }
+    return `All in reach · best: ${name}`;
   }
   return `${summary.investable} to act on · ${parts.join(" · ")}`;
 }
@@ -724,6 +775,7 @@ function OpportunitiesOverview({
   summary,
   settings,
   investabilityFor,
+  bookValueDkk,
   hideOffLimits,
   onToggleOffLimits,
   watchlist,
@@ -736,6 +788,7 @@ function OpportunitiesOverview({
   summary: InvestabilitySummary;
   settings: BrokerSettings;
   investabilityFor: (company: Company) => Investability;
+  bookValueDkk: number;
   hideOffLimits: boolean;
   onToggleOffLimits: (next: boolean) => void;
   watchlist: WatchEntry[];
@@ -795,6 +848,7 @@ function OpportunitiesOverview({
           rec={standout}
           exposure={standoutExposure}
           investability={investabilityFor(standout.company)}
+          bookValueDkk={bookValueDkk}
           onSelect={onSelect}
         />
       )}
@@ -1003,15 +1057,18 @@ function StandoutIdea({
   rec,
   exposure,
   investability,
+  bookValueDkk,
   onSelect,
 }: {
   rec: Recommendation;
   exposure: OpportunityOverview["standoutExposure"];
   investability?: Investability;
+  bookValueDkk: number;
   onSelect: (symbol: string) => void;
 }) {
   const { company } = rec;
   const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
+  const plan = investability ? planPosition(investability, bookValueDkk) : undefined;
   return (
     <button
       type="button"
@@ -1036,8 +1093,11 @@ function StandoutIdea({
         </div>
         <p className="opp-hero-why">{rec.headline}</p>
         <p className="opp-hero-fit">{standoutFit(exposure)}</p>
-        {investability && investability.status === "ok" && (
-          <p className="opp-hero-invest">✓ {investability.note}</p>
+        {plan ? (
+          <BuyPlan plan={plan} variant="hero" />
+        ) : (
+          investability &&
+          investability.status === "ok" && <p className="opp-hero-invest">✓ {investability.note}</p>
         )}
       </div>
       {company.market?.dayChangePct !== undefined && (
@@ -1529,16 +1589,19 @@ function CompanyDetail({
   context,
   peers,
   investability,
+  bookValueDkk,
   onSelect,
 }: {
   recommendation: Recommendation;
   context?: HoldingContext;
   peers?: PeerComparison;
   investability?: Investability;
+  bookValueDkk: number;
   onSelect: (symbol: string) => void;
 }) {
   const { company, compliance, holding } = recommendation;
   const market = company.market;
+  const plan = investability ? planPosition(investability, bookValueDkk) : undefined;
 
   return (
     <section className="detail">
@@ -1613,7 +1676,8 @@ function CompanyDetail({
           )}
           <div>
             <strong>{investabilityTitle(investability)}</strong>
-            <span>{investability.note}</span>
+            <span>{plan ? describePlan(plan) : investability.note}</span>
+            {plan && <BuyPlan plan={plan} variant="detail" />}
           </div>
         </div>
       )}
