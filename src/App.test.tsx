@@ -176,6 +176,32 @@ describe("App", () => {
     expect(within(screen.getByLabelText(/^Opportunities$/i)).queryByText(/1 share > budget/i)).toBeNull();
   });
 
+  it("turns an affordable idea into a concrete buy plan sized to the slot", async () => {
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        // AMD is an opportunity (not held) on NASDAQ; ~200 USD ≈ 1,380 DKK a share,
+        // so a 5,000 DKK slot buys 3 whole shares (4,140 DKK) and strands the rest.
+        AMD: { symbol: "AMD", price: 200, currency: "USD", momentum: 65, asOf: "2026-06-28T18:49:41.386Z" },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/Live data/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    fireEvent.click(screen.getByText(/Advanced Micro Devices/i));
+
+    // The detail view sizes the position to the per-trade slot, not just the score.
+    const plan = screen.getByLabelText(/buy plan for your per-trade slot/i);
+    expect(within(plan).getByText(/buy plan/i)).toBeInTheDocument();
+    expect(within(plan).getByText(/≈ 3 shares/i)).toBeInTheDocument();
+    expect(within(plan).getByText(/of your DKK 5,000 slot/i)).toBeInTheDocument();
+    expect(within(plan).getByText(/of your book/i)).toBeInTheDocument();
+  });
+
   it("marks a market off-platform from the broker settings, and clears it again", () => {
     render(<App />);
 
