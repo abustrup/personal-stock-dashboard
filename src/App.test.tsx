@@ -77,6 +77,22 @@ describe("App", () => {
     expect(within(analysis).getAllByText(/^editorial$/i).length).toBeGreaterThan(0);
   });
 
+  it("ranks a holding against its theme peers and labels the comparison", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+
+    const peers = screen.getByLabelText(/theme peers in ai infrastructure/i);
+    // The ladder states the rank and reuses the map's ownership vocabulary.
+    expect(within(peers).getByText(/ranks \w+ of \d+ by model score/i)).toBeInTheDocument();
+    expect(within(peers).getByText(/filled marker = you own it/i)).toBeInTheDocument();
+    expect(within(peers).getByText(/not your broker/i)).toBeInTheDocument();
+    // Each peer is its own openable row with an accessible name carrying ownership.
+    const rows = within(peers).getAllByRole("button");
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    expect(rows.some((row) => /you (own it|don't own it)/i.test(row.getAttribute("aria-label") ?? ""))).toBe(true);
+  });
+
   it("plots holdings and opportunities on the decision map and opens a name", () => {
     render(<App />);
 
