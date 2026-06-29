@@ -194,6 +194,48 @@ describe("App", () => {
     expect(nasdaq()).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("lets the user add their own name, scores it like any opportunity, and removes it", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+
+    const cardCount = () =>
+      within(screen.getByLabelText(/^Opportunities$/i))
+        .getAllByRole("button")
+        .filter((button) => button.classList.contains("decision-card")).length;
+    const before = cardCount();
+
+    // Type a name that isn't in the curated universe and add it.
+    fireEvent.change(screen.getByLabelText(/company name/i), { target: { value: "Cloudflare, Inc." } });
+    fireEvent.change(screen.getByLabelText(/ticker symbol/i), { target: { value: "net" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+
+    // It joins the opportunity set as a new, scored card flagged "Added by you".
+    const panel = screen.getByLabelText(/^Opportunities$/i);
+    expect(cardCount()).toBe(before + 1);
+    expect(within(panel).getAllByText(/added by you/i).length).toBeGreaterThan(0);
+    // A removable chip and the live refresh hint both appear.
+    expect(within(panel).getByText(/npm run refresh -- NET/i)).toBeInTheDocument();
+
+    // Adding a name already in the curated set (PLTR is curated but not a demo
+    // holding) is rejected with a clear message.
+    fireEvent.change(screen.getByLabelText(/company name/i), { target: { value: "Palantir" } });
+    fireEvent.change(screen.getByLabelText(/ticker symbol/i), { target: { value: "PLTR" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/already in the curated set/i);
+
+    // Adding a name the user already holds (NVDA is a demo holding) is rejected
+    // as owned — so it never becomes a chip with no matching opportunity card.
+    fireEvent.change(screen.getByLabelText(/company name/i), { target: { value: "NVIDIA" } });
+    fireEvent.change(screen.getByLabelText(/ticker symbol/i), { target: { value: "NVDA" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/you already own that/i);
+
+    // Removing the watched name drops it back out of the opportunity set.
+    fireEvent.click(screen.getByRole("button", { name: /remove cloudflare, inc\. from your watchlist/i }));
+    expect(cardCount()).toBe(before);
+    expect(within(screen.getByLabelText(/^Opportunities$/i)).queryByText(/added by you/i)).toBeNull();
+  });
+
   it("plots holdings and opportunities on the decision map and opens a name", () => {
     render(<App />);
 

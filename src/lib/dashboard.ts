@@ -19,9 +19,17 @@ export function buildDashboardModel(
   holdings: Holding[],
   universe: Company[],
   overrides: ComplianceOverrides = {},
+  watchlist: Company[] = [],
 ): DashboardModel {
   const companyBySymbol = new Map(universe.map((company) => [company.symbol, company]));
   const holdingSymbols = new Set(holdings.map((holding) => holding.symbol));
+
+  // User-added watchlist names join the opportunity field, but never shadow a
+  // curated name or one you already own: a watch entry whose symbol is already in
+  // the universe or your portfolio is dropped so each name appears exactly once.
+  const universeSymbols = new Set(universe.map((company) => company.symbol));
+  const extraCompanies = watchlist.filter((company) => !universeSymbols.has(company.symbol));
+  const field = [...universe, ...extraCompanies];
 
   const portfolio = rankRecommendations(
     holdings.map((holding) =>
@@ -30,7 +38,7 @@ export function buildDashboardModel(
   );
 
   const opportunities = rankRecommendations(
-    universe
+    field
       .filter((company) => !holdingSymbols.has(company.symbol))
       .map((company) => recommendCompany(company, undefined, overrides)),
   );
