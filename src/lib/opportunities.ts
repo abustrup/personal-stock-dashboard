@@ -36,6 +36,12 @@ export type OpportunityOverview = {
   gapCount: number;
   /** Number of distinct themes represented. */
   themeCount: number;
+  /**
+   * How many higher-scoring ideas were passed over because you can't act on them
+   * (off your broker's markets, or a single share is over budget) before reaching
+   * the standout. 0 when the top idea is itself investable or no gate was applied.
+   */
+  standoutSkipped: number;
 };
 
 /** Owned exposure to a single theme: how many holdings and their combined weight. */
@@ -74,6 +80,7 @@ function ownedThemeExposure(portfolio: Recommendation[]): Map<string, ThemeExpos
 export function buildOpportunityOverview(
   portfolio: Recommendation[],
   opportunities: Recommendation[],
+  investableSymbols?: Set<string>,
 ): OpportunityOverview {
   const exposure = ownedThemeExposure(portfolio);
   const exposureFor = (theme: string): ThemeExposure =>
@@ -111,7 +118,18 @@ export function buildOpportunityOverview(
       a.theme.localeCompare(b.theme),
   );
 
-  const standout = opportunities.find((rec) => rec.action !== "avoid");
+  // Lead with the best idea you can actually act on. When an investability filter
+  // is supplied, skip higher-scoring names that are off-platform or over budget so
+  // the hero is never an idea the user can't buy — and record how many were passed
+  // so the UI can say so honestly. Without a filter, this is just the top idea.
+  const candidates = opportunities.filter((rec) => rec.action !== "avoid");
+  const firstInvestable = investableSymbols
+    ? candidates.findIndex((rec) => investableSymbols.has(rec.company.symbol))
+    : candidates.length > 0
+      ? 0
+      : -1;
+  const standout = firstInvestable >= 0 ? candidates[firstInvestable] : candidates[0];
+  const standoutSkipped = firstInvestable > 0 ? firstInvestable : 0;
   const standoutTheme = standout?.company.themes[0];
   const standoutExposure = standoutTheme
     ? { theme: standoutTheme, ...exposureFor(standoutTheme), isGap: exposureFor(standoutTheme).ownedCount === 0 }
@@ -126,5 +144,6 @@ export function buildOpportunityOverview(
     total: opportunities.length,
     gapCount,
     themeCount: groups.length,
+    standoutSkipped,
   };
 }

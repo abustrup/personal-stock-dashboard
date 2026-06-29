@@ -5,6 +5,9 @@ import App from "./App";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Broker & budget settings persist in localStorage; reset so each test starts
+  // from the defaults rather than inheriting a prior test's toggles.
+  localStorage.clear();
 });
 
 describe("App", () => {
@@ -116,6 +119,79 @@ describe("App", () => {
     // Opening a name from a theme group routes to its detail view.
     fireEvent.click(cards[0]);
     expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+  });
+
+  it("summarises what you can act on and flags off-platform ideas without hiding them", () => {
+    render(<App />);
+
+    // Front page: the investability card is part of the "what Saxo doesn't tell you" band.
+    expect(screen.getByText(/Investable now/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    const panel = screen.getByLabelText(/^Opportunities$/i);
+
+    // The readout names how many ideas you can act on.
+    expect(within(panel).getByText(/to act on/i)).toBeInTheDocument();
+    // The Korea-listed names (Samsung, SK hynix) are off Saxo — flagged, not hidden.
+    expect(within(panel).getAllByText(/off saxo/i).length).toBeGreaterThan(0);
+    // Even off-limits, every non-owned name is still shown (honest, not silently dropped).
+    const cards = within(panel)
+      .getAllByRole("button")
+      .filter((button) => button.classList.contains("decision-card"));
+    expect(cards).toHaveLength(13);
+    // Off-limits cards are visually demoted via a class, not removed from the DOM.
+    expect(cards.some((card) => card.classList.contains("off-limits"))).toBe(true);
+
+    // The hide toggle removes them on demand, then the count drops below 13.
+    fireEvent.click(within(panel).getByLabelText(/hide off-limits/i));
+    const after = within(screen.getByLabelText(/^Opportunities$/i))
+      .getAllByRole("button")
+      .filter((button) => button.classList.contains("decision-card"));
+    expect(after.length).toBeLessThan(13);
+    expect(after.some((card) => card.classList.contains("off-limits"))).toBe(false);
+  });
+
+  it("flags an above-budget name when live prices load and lets the user raise the budget", async () => {
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        // ASML near 1,800 USD ≈ 12,000+ DKK a share — over the default 5,000 DKK budget.
+        ASML: { symbol: "ASML", price: 1794.62, currency: "USD", momentum: 70, asOf: "2026-06-28T18:49:41.386Z" },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/Live data/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    const panel = screen.getByLabelText(/^Opportunities$/i);
+    // One whole share already overshoots the per-trade budget.
+    expect(within(panel).getAllByText(/1 share > budget/i).length).toBeGreaterThan(0);
+
+    // Raising the budget past a single share clears the flag.
+    const budget = screen.getByLabelText(/per-trade budget in dkk/i);
+    fireEvent.change(budget, { target: { value: "20000" } });
+    expect(within(screen.getByLabelText(/^Opportunities$/i)).queryByText(/1 share > budget/i)).toBeNull();
+  });
+
+  it("marks a market off-platform from the broker settings, and clears it again", () => {
+    render(<App />);
+
+    // The chips live inside a collapsed disclosure; query including hidden nodes.
+    const nasdaq = () => screen.getByRole("button", { name: /^NASDAQ$/i, hidden: true });
+    // NASDAQ starts tradable; mark it off-platform and the chip reflects the change.
+    expect(nasdaq()).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(nasdaq());
+    expect(nasdaq()).toHaveAttribute("aria-pressed", "false");
+
+    // The summary line now reports more markets off the platform.
+    expect(screen.getByText(/markets off your platform/i)).toBeInTheDocument();
+
+    // Toggling it back restores tradable state.
+    fireEvent.click(nasdaq());
+    expect(nasdaq()).toHaveAttribute("aria-pressed", "true");
   });
 
   it("plots holdings and opportunities on the decision map and opens a name", () => {

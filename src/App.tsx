@@ -1,16 +1,20 @@
 import {
   AlertTriangle,
+  Ban,
   BriefcaseBusiness,
   Compass,
   FileUp,
   GitCompareArrows,
+  Landmark,
   Radar,
   RotateCcw,
   ScatterChart,
   Search,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
@@ -37,6 +41,15 @@ import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
+import {
+  assessInvestability,
+  investableSymbols,
+  summarizeInvestability,
+  type BrokerSettings,
+  type Investability,
+  type InvestabilitySummary,
+} from "./lib/investability";
+import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "map" | "compare" | "detail";
@@ -68,6 +81,13 @@ export default function App() {
   const [externalSignals, setExternalSignals] = useState<ExternalSignalSnapshot>({});
   const [marketSnapshots, setMarketSnapshots] = useState<MarketSnapshotMap>({});
   const [dataAsOf, setDataAsOf] = useState<string | undefined>();
+  const [brokerSettings, setBrokerSettings] = useState<BrokerSettings>(loadBrokerSettings);
+  const [hideOffLimits, setHideOffLimits] = useState(false);
+
+  function updateBrokerSettings(next: BrokerSettings) {
+    setBrokerSettings(next);
+    saveBrokerSettings(next);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -104,10 +124,45 @@ export default function App() {
     [holdings, enrichedUniverse],
   );
   const insights = useMemo(() => buildInsights(model.portfolio, model.opportunities), [model]);
-  const opportunityOverview = useMemo(
-    () => buildOpportunityOverview(model.portfolio, model.opportunities),
-    [model],
+
+  // Investability: which opportunities the user can actually act on through their
+  // broker and within their per-trade budget. Computed from the same model the
+  // rest of the dashboard uses, so the badges, counts and standout never disagree.
+  const investabilityFor = useMemo(() => {
+    const cache = new Map<string, Investability>();
+    return (company: Company): Investability => {
+      const hit = cache.get(company.symbol);
+      if (hit) return hit;
+      const inv = assessInvestability(company, brokerSettings);
+      cache.set(company.symbol, inv);
+      return inv;
+    };
+  }, [brokerSettings]);
+  const oppInvestableSet = useMemo(
+    () => investableSymbols(model.opportunities, brokerSettings),
+    [model.opportunities, brokerSettings],
   );
+  const investSummary: InvestabilitySummary = useMemo(
+    () => summarizeInvestability(model.opportunities, brokerSettings),
+    [model.opportunities, brokerSettings],
+  );
+  const visibleOpportunities = useMemo(
+    () => (hideOffLimits ? model.opportunities.filter((rec) => oppInvestableSet.has(rec.company.symbol)) : model.opportunities),
+    [hideOffLimits, model.opportunities, oppInvestableSet],
+  );
+  const opportunityOverview = useMemo(
+    () => buildOpportunityOverview(model.portfolio, visibleOpportunities, oppInvestableSet),
+    [model.portfolio, visibleOpportunities, oppInvestableSet],
+  );
+  // Markets present in the curated universe — the toggle set the user picks from.
+  // Drop editorial placeholders that aren't real public venues (private/pre-IPO
+  // proxies, unknown imports) so the control only lists markets a broker can map to.
+  const knownMarkets = useMemo(() => {
+    const notAVenue = new Set(["Private proxy", "Unknown"]);
+    return [...new Set(universe.map((company) => company.exchange))]
+      .filter((exchange) => !notAVenue.has(exchange))
+      .sort((a, b) => a.localeCompare(b));
+  }, []);
   const selected =
     model.all.find((recommendation) => recommendation.company.symbol === selectedSymbol) ??
     model.topIdea ??
@@ -234,11 +289,7 @@ export default function App() {
             tone="idea"
             label="Top opportunity"
             value={insights.topOpportunity ? insights.topOpportunity.company.name : "—"}
-            detail={
-              insights.topOpportunity
-                ? `${insights.topOpportunity.action} · score ${insights.topOpportunity.score} · you don't own it`
-                : "No standout idea right now"
-            }
+            detail={topOpportunityDetail(insights.topOpportunity, investabilityFor)}
             onClick={() => open(insights.topOpportunity?.company.symbol)}
           />
           <InsightCard
@@ -256,6 +307,14 @@ export default function App() {
                 : "Import a portfolio to see concentration"
             }
             onClick={() => open(insights.concentration?.top.company.symbol)}
+          />
+          <InsightCard
+            icon={Wallet}
+            tone={investSummary.offPlatform + investSummary.aboveBudget > 0 ? "neutral" : "calm"}
+            label="Investable now"
+            value={`${investSummary.investable} of ${investSummary.total}`}
+            detail={investableDetail(investSummary)}
+            onClick={() => setView("opportunities")}
           />
         </div>
       </section>
@@ -284,11 +343,25 @@ export default function App() {
         </span>
       </p>
 
+      <BrokerBar
+        settings={brokerSettings}
+        markets={knownMarkets}
+        onChange={updateBrokerSettings}
+      />
+
       {view === "portfolio" && (
         <DecisionList title="Your holdings" subtitle="Ranked by what to do next" items={model.portfolio} onSelect={open} />
       )}
       {view === "opportunities" && (
-        <OpportunitiesOverview overview={opportunityOverview} onSelect={open} />
+        <OpportunitiesOverview
+          overview={opportunityOverview}
+          summary={investSummary}
+          settings={brokerSettings}
+          investabilityFor={investabilityFor}
+          hideOffLimits={hideOffLimits}
+          onToggleOffLimits={setHideOffLimits}
+          onSelect={open}
+        />
       )}
       {view === "map" && (
         <DecisionMap
@@ -318,6 +391,7 @@ export default function App() {
           recommendation={selected}
           context={insights.holdingContexts.get(selected.company.symbol)}
           peers={peerComparison}
+          investability={selected.holding ? undefined : investabilityFor(selected.company)}
           onSelect={open}
         />
       )}
@@ -349,6 +423,147 @@ function InsightCard({
       <strong className="insight-value">{value}</strong>
       <span className="insight-detail">{detail}</span>
     </button>
+  );
+}
+
+// The investability gate badge: a quiet, slate-toned pill — deliberately NOT in
+// the warm-red EIFO palette, because this is a practical "can I act on it?" gate,
+// not a compliance danger. A bank pillar marks an off-platform market; a wallet
+// marks a name a single share already overshoots the budget for.
+function InvestabilityBadge({ investability }: { investability: Investability }) {
+  const platform = investability.status === "not_tradable";
+  const Icon = platform ? Landmark : Wallet;
+  return (
+    <span className={`gate ${platform ? "gate-platform" : "gate-budget"}`} title={investability.note}>
+      <Icon aria-hidden="true" size={12} />
+      {investability.reason}
+    </span>
+  );
+}
+
+// The one-line detail under the front-page "Investable now" card. Honest in both
+// directions: it leads with what's blocked when anything is, and otherwise names
+// the best idea you can act on right now.
+function investableDetail(summary: InvestabilitySummary): string {
+  const parts: string[] = [];
+  if (summary.offPlatform > 0) parts.push(`${summary.offPlatform} off Saxo`);
+  if (summary.aboveBudget > 0) parts.push(`${summary.aboveBudget} over budget`);
+  if (parts.length === 0) {
+    return summary.topInvestable ? `All in reach · best: ${summary.topInvestable.company.name}` : "No ideas to act on yet";
+  }
+  return `${summary.investable} to act on · ${parts.join(" · ")}`;
+}
+
+// The top opportunity by score may be one you can't act on (off your broker, or a
+// single share over budget). Surface that on the front page rather than headlining
+// an un-buyable name as if it were a clean recommendation.
+function topOpportunityDetail(
+  topOpportunity: Recommendation | undefined,
+  investabilityFor: (company: Company) => Investability,
+): string {
+  if (!topOpportunity) return "No standout idea right now";
+  const inv = investabilityFor(topOpportunity.company);
+  const gated = inv.status !== "ok" && inv.status !== "unknown";
+  const tail = gated ? inv.reason : "you don't own it";
+  return `${topOpportunity.action} · score ${topOpportunity.score} · ${tail}`;
+}
+
+// The detail-view investability heading, in the user's own terms.
+function investabilityTitle(investability: Investability): string {
+  if (investability.status === "not_tradable") return "Off your platform";
+  if (investability.status === "above_budget") return "Above your per-trade budget";
+  return "Within reach";
+}
+
+// Where the user tells the dashboard about their own account: the per-trade budget
+// that defines "affordable" and which markets their broker can actually trade. A
+// quiet disclosure so it stays out of the way until needed — the settings persist
+// in this browser. This is the control the rest of the investability layer reads.
+function BrokerBar({
+  settings,
+  markets,
+  onChange,
+}: {
+  settings: BrokerSettings;
+  markets: string[];
+  onChange: (next: BrokerSettings) => void;
+}) {
+  const offCount = settings.untradableExchanges.length;
+  function setBudget(value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    onChange({ ...settings, perTradeBudgetDkk: Math.round(value) });
+  }
+  function toggleMarket(market: string) {
+    const off = settings.untradableExchanges.includes(market);
+    onChange({
+      ...settings,
+      untradableExchanges: off
+        ? settings.untradableExchanges.filter((m) => m !== market)
+        : [...settings.untradableExchanges, market],
+    });
+  }
+  return (
+    <details className="broker-bar">
+      <summary>
+        <span className="broker-bar-icon">
+          <SlidersHorizontal aria-hidden="true" size={15} />
+        </span>
+        <span className="broker-bar-summary">
+          <strong>Broker &amp; budget</strong>
+          <span>
+            DKK {formatNumber(settings.perTradeBudgetDkk)} per trade ·{" "}
+            {offCount === 0
+              ? "all markets tradable"
+              : `${offCount} market${offCount === 1 ? "" : "s"} off your platform`}
+          </span>
+        </span>
+        <span className="broker-bar-edit">Edit</span>
+      </summary>
+      <div className="broker-bar-body">
+        <label className="broker-budget">
+          <span className="broker-field-label">Typical position size</span>
+          <span className="broker-budget-input">
+            <span className="broker-budget-cur">DKK</span>
+            <input
+              type="number"
+              min={100}
+              step={500}
+              value={settings.perTradeBudgetDkk}
+              onChange={(event) => setBudget(Number(event.target.value))}
+              aria-label="Per-trade budget in DKK"
+            />
+          </span>
+          <span className="broker-field-hint">
+            Any idea whose single share costs more than this is flagged above budget.
+          </span>
+        </label>
+        <div className="broker-markets">
+          <span className="broker-field-label">Markets your broker can trade</span>
+          <div className="market-chips">
+            {markets.map((market) => {
+              const off = settings.untradableExchanges.includes(market);
+              return (
+                <button
+                  key={market}
+                  type="button"
+                  className={`market-chip${off ? " off" : ""}`}
+                  aria-pressed={!off}
+                  onClick={() => toggleMarket(market)}
+                  title={off ? `${market} — off your platform` : `${market} — tradable`}
+                >
+                  {off ? <Ban aria-hidden="true" size={12} /> : <Landmark aria-hidden="true" size={12} />}
+                  {market}
+                </button>
+              );
+            })}
+          </div>
+          <span className="broker-field-hint">
+            Tap a market to mark it off-platform — Saxo Investor doesn&apos;t trade the Korea Exchange, for
+            instance. Off-platform names stay scored, but are flagged so you don&apos;t act on one you can&apos;t buy.
+          </span>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -385,10 +600,23 @@ function DecisionList({
   );
 }
 
-function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (symbol: string) => void }) {
+function DecisionCard({
+  item,
+  investability,
+  onSelect,
+}: {
+  item: Recommendation;
+  investability?: Investability;
+  onSelect: (symbol: string) => void;
+}) {
   const { company, holding, compliance } = item;
+  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
   return (
-    <button className="decision-card" type="button" onClick={() => onSelect(company.symbol)}>
+    <button
+      className={`decision-card${offLimits ? " off-limits" : ""}`}
+      type="button"
+      onClick={() => onSelect(company.symbol)}
+    >
       <ScoreRing score={item.score} action={item.action} />
       <div className="dc-body">
         <div className="dc-top">
@@ -399,6 +627,7 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
           {compliance.status !== "unknown" && (
             <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
           )}
+          {offLimits && <InvestabilityBadge investability={investability} />}
         </div>
         <strong className="dc-name">{company.name}</strong>
         <p className="dc-why">{item.headline}</p>
@@ -434,15 +663,27 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
 // with the detail or compare views.
 function OpportunitiesOverview({
   overview,
+  summary,
+  settings,
+  investabilityFor,
+  hideOffLimits,
+  onToggleOffLimits,
   onSelect,
 }: {
   overview: OpportunityOverview;
+  summary: InvestabilitySummary;
+  settings: BrokerSettings;
+  investabilityFor: (company: Company) => Investability;
+  hideOffLimits: boolean;
+  onToggleOffLimits: (next: boolean) => void;
   onSelect: (symbol: string) => void;
 }) {
-  const { standout, standoutExposure, groups, total, gapCount, themeCount } = overview;
+  const { standout, standoutExposure, groups, total, gapCount, themeCount, standoutSkipped } = overview;
   const gapThemeCount = groups.filter((g) => g.isGap).length;
+  const offLimitsTotal = summary.offPlatform + summary.aboveBudget;
 
   if (total === 0) {
+    const hiddenByFilter = hideOffLimits && offLimitsTotal > 0;
     return (
       <section className="panel" aria-label="Opportunities">
         <div className="panel-heading">
@@ -451,7 +692,17 @@ function OpportunitiesOverview({
             <span>Names you don&apos;t own — and where your book has no exposure yet</span>
           </div>
         </div>
-        <p className="empty">No opportunities in the universe right now. Every curated name is one you already hold.</p>
+        {hiddenByFilter ? (
+          <p className="empty">
+            Every idea is off-limits for your account right now — {offLimitsTotal} hidden.{" "}
+            <button type="button" className="link-button" onClick={() => onToggleOffLimits(false)}>
+              Show off-limits ideas
+            </button>{" "}
+            to see them anyway, or widen your broker &amp; budget settings above.
+          </p>
+        ) : (
+          <p className="empty">No opportunities in the universe right now. Every curated name is one you already hold.</p>
+        )}
       </section>
     );
   }
@@ -466,7 +717,51 @@ function OpportunitiesOverview({
         <span className="count">{total}</span>
       </div>
 
-      {standout && <StandoutIdea rec={standout} exposure={standoutExposure} onSelect={onSelect} />}
+      {standout && (
+        <StandoutIdea
+          rec={standout}
+          exposure={standoutExposure}
+          investability={investabilityFor(standout.company)}
+          onSelect={onSelect}
+        />
+      )}
+
+      {standoutSkipped > 0 && (
+        <p className="invest-skip-note">
+          The {standoutSkipped === 1 ? "top idea by score is" : `top ${standoutSkipped} ideas by score are`}{" "}
+          off-limits for your account — this is the strongest one you can actually act on.
+        </p>
+      )}
+
+      <div className="invest-bar">
+        <div className="invest-stats" role="group" aria-label="What you can act on">
+          <span className="invest-stat ok">
+            <strong>{summary.investable}</strong> to act on
+          </span>
+          {summary.offPlatform > 0 && (
+            <span className="invest-stat off">
+              <Landmark aria-hidden="true" size={13} />
+              <strong>{summary.offPlatform}</strong> off Saxo
+            </span>
+          )}
+          {summary.aboveBudget > 0 && (
+            <span className="invest-stat budget">
+              <Wallet aria-hidden="true" size={13} />
+              <strong>{summary.aboveBudget}</strong> over DKK {formatNumber(settings.perTradeBudgetDkk)}
+            </span>
+          )}
+        </div>
+        {offLimitsTotal > 0 && (
+          <label className="invest-toggle">
+            <input
+              type="checkbox"
+              checked={hideOffLimits}
+              onChange={(event) => onToggleOffLimits(event.target.checked)}
+            />
+            <span>Hide off-limits</span>
+          </label>
+        )}
+      </div>
 
       <p className="opps-summary">
         <strong>{total}</strong> {total === 1 ? "idea" : "ideas"} across <strong>{themeCount}</strong>{" "}
@@ -484,7 +779,7 @@ function OpportunitiesOverview({
 
       <div className="opp-groups">
         {groups.map((group) => (
-          <ThemeGroup key={group.theme} group={group} onSelect={onSelect} />
+          <ThemeGroup key={group.theme} group={group} investabilityFor={investabilityFor} onSelect={onSelect} />
         ))}
       </div>
 
@@ -503,17 +798,20 @@ function OpportunitiesOverview({
 function StandoutIdea({
   rec,
   exposure,
+  investability,
   onSelect,
 }: {
   rec: Recommendation;
   exposure: OpportunityOverview["standoutExposure"];
+  investability?: Investability;
   onSelect: (symbol: string) => void;
 }) {
   const { company } = rec;
+  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
   return (
     <button
       type="button"
-      className="opp-hero"
+      className={`opp-hero${offLimits ? " off-limits" : ""}`}
       onClick={() => onSelect(company.symbol)}
       aria-label={`Standout idea: ${company.name}, score ${rec.score}, ${rec.action} — open detail`}
     >
@@ -529,9 +827,13 @@ function StandoutIdea({
           {rec.compliance.status !== "unknown" && (
             <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
           )}
+          {offLimits && <InvestabilityBadge investability={investability} />}
         </div>
         <p className="opp-hero-why">{rec.headline}</p>
         <p className="opp-hero-fit">{standoutFit(exposure)}</p>
+        {investability && investability.status === "ok" && (
+          <p className="opp-hero-invest">✓ {investability.note}</p>
+        )}
       </div>
       {company.market?.dayChangePct !== undefined && (
         <div className="opp-hero-right">
@@ -559,7 +861,15 @@ function standoutFit(exposure: OpportunityOverview["standoutExposure"]): string 
 // One theme section: a theme eyebrow plus the signature exposure meter encoding how
 // much of your book is already here, then the opportunity rows. A gap theme reads
 // visually empty (dashed, accent-labelled) so the absence is the point.
-function ThemeGroup({ group, onSelect }: { group: OpportunityGroup; onSelect: (symbol: string) => void }) {
+function ThemeGroup({
+  group,
+  investabilityFor,
+  onSelect,
+}: {
+  group: OpportunityGroup;
+  investabilityFor: (company: Company) => Investability;
+  onSelect: (symbol: string) => void;
+}) {
   const { theme, opportunities, ownedCount, ownedWeightPct, isGap } = group;
   const fill = Math.max(0, Math.min(100, ownedWeightPct));
   const exposureLabel = isGap
@@ -586,7 +896,12 @@ function ThemeGroup({ group, onSelect }: { group: OpportunityGroup; onSelect: (s
       </header>
       <div className="decision-grid">
         {opportunities.map((item) => (
-          <DecisionCard key={item.company.symbol} item={item} onSelect={onSelect} />
+          <DecisionCard
+            key={item.company.symbol}
+            item={item}
+            investability={investabilityFor(item.company)}
+            onSelect={onSelect}
+          />
         ))}
       </div>
     </section>
@@ -1008,11 +1323,13 @@ function CompanyDetail({
   recommendation,
   context,
   peers,
+  investability,
   onSelect,
 }: {
   recommendation: Recommendation;
   context?: HoldingContext;
   peers?: PeerComparison;
+  investability?: Investability;
   onSelect: (symbol: string) => void;
 }) {
   const { company, compliance, holding } = recommendation;
@@ -1079,6 +1396,22 @@ function CompanyDetail({
           <span className="note">Source: {compliance.source}</span>
         </div>
       </div>
+
+      {investability && investability.status !== "unknown" && (
+        <div className={`investability ${investability.status}`} aria-label="whether you can act on this">
+          {investability.status === "not_tradable" ? (
+            <Landmark size={18} aria-hidden="true" />
+          ) : investability.status === "above_budget" ? (
+            <Wallet size={18} aria-hidden="true" />
+          ) : (
+            <ShieldCheck size={18} aria-hidden="true" />
+          )}
+          <div>
+            <strong>{investabilityTitle(investability)}</strong>
+            <span>{investability.note}</span>
+          </div>
+        </div>
+      )}
 
       {market && (
         <article className="card market-card">
