@@ -1315,49 +1315,172 @@ body > #root {
 }
 
 /* ---------- investability readout bar ---------- */
-.invest-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0 0 16px;
-  padding: 11px 14px;
-  border: 1px solid var(--line);
+/* ---------- reach: of every idea, how many you can actually act on ----------
+   The signature is a single segmented track — within-reach (green) | off your
+   broker (slate) | over budget (amber) — so the share you can touch is legible at
+   a glance. Below it, the blocked names are spelled out, grouped by the reason,
+   each a button into the detail view. Honest decision support a broker can't give:
+   it never tells you a top mover is on a market it can't trade. */
+.reach {
+  margin: 0 0 18px;
+  padding: 15px 16px 16px;
+  border: 1px solid var(--card-border);
   border-radius: var(--r-inset);
-  background: var(--inset);
+  background: var(--card);
 }
-.invest-stats {
+.reach-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px 16px;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
 }
-.invest-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--muted-2);
+.reach-eyebrow {
+  margin: 0 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
-.invest-stat strong {
-  font-size: 15px;
+.reach-lead {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--body);
+}
+.reach-lead strong {
   color: var(--ink);
   font-weight: 700;
 }
-.invest-stat.ok strong {
-  color: var(--up);
+.reach-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--bar-track);
 }
-.invest-stat.off,
-.invest-stat.budget {
-  padding-left: 16px;
-  border-left: 1px solid var(--line);
+.reach-seg {
+  height: 100%;
+  min-width: 4px;
+  border-radius: 2px;
+  transform-origin: left center;
+  animation: reach-grow 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
-.invest-stat.off svg {
-  color: #3f4a63;
+.reach-seg.ok {
+  background: var(--up-bar);
 }
-.invest-stat.budget svg {
-  color: #6a6440;
+.reach-seg.off {
+  background: #5b6577;
+}
+.reach-seg.budget {
+  background: var(--eifo);
+}
+@keyframes reach-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.reach-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+}
+.reach-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.reach-key strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.reach-key.ok i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--up-bar);
+}
+.reach-key.off svg {
+  color: #5b6577;
+}
+.reach-key.budget svg {
+  color: #93701f;
+}
+.reach-blocked {
+  list-style: none;
+  margin: 13px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--row-line);
+  display: grid;
+  gap: 9px;
+}
+.reach-block {
+  display: grid;
+  grid-template-columns: minmax(160px, max-content) 1fr;
+  gap: 4px 16px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+.reach-block-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.reach-block.off .reach-block-reason svg {
+  color: #5b6577;
+}
+.reach-block.budget .reach-block-reason svg {
+  color: #93701f;
+}
+.reach-block-names {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 7px;
+  color: var(--body);
+}
+.reach-sep {
+  color: var(--chevron);
+}
+.reach-name {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--body);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.reach-name:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent-border);
+}
+.reach-name-cost {
+  color: var(--faint);
+  font-weight: 500;
+}
+.reach-foot {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+@media (max-width: 560px) {
+  .reach-block {
+    grid-template-columns: 1fr;
+  }
 }
 .invest-toggle {
   display: inline-flex;
@@ -2938,7 +3061,8 @@ body > #root {
 .cmp-picker select:focus-visible,
 .peer-row:focus-visible,
 .detail-back:focus-visible,
-.market-chip:focus-visible {
+.market-chip:focus-visible,
+.reach-name:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2954,7 +3078,8 @@ body > #root {
   .view,
   .map-mark,
   .ring-arc,
-  .live-dot {
+  .live-dot,
+  .reach-seg {
     animation: none;
     transition: none;
   }

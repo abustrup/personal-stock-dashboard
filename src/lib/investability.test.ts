@@ -5,6 +5,7 @@ import {
   fxToDkk,
   investableSymbols,
   isInvestable,
+  reachBreakdown,
   summarizeInvestability,
   type BrokerSettings,
 } from "./investability";
@@ -169,6 +170,59 @@ describe("summarizeInvestability", () => {
     expect(set.has("AMD")).toBe(true);
     expect(set.has("ASML")).toBe(false);
     expect(set.has("000660.KS")).toBe(false);
+  });
+});
+
+describe("reachBreakdown", () => {
+  const recs = [
+    rec(company({ name: "Taiwan Semiconductor", symbol: "TSM", exchange: "NYSE", market: market(432.35, "USD") }), "investigate", 80),
+    rec(company({ name: "ASML Holding", symbol: "ASML", market: market(1794.62, "USD") }), "watch", 70),
+    rec(company({ name: "SK hynix", symbol: "000660.KS", exchange: "Korea Exchange", market: market(2628000, "KRW") }), "watch", 65),
+    rec(company({ name: "Samsung Electronics", symbol: "005930.KS", exchange: "Korea Exchange", market: market(323000, "KRW") }), "watch", 62),
+    rec(company({ name: "Advanced Micro Devices", symbol: "AMD", exchange: "NASDAQ" }), "investigate", 60),
+  ];
+
+  it("names off-platform ideas grouped under their blocking exchange", () => {
+    const { offPlatform } = reachBreakdown(recs, settings);
+    expect(offPlatform).toHaveLength(1);
+    expect(offPlatform[0].exchange).toBe("Korea Exchange");
+    // Names are sorted alphabetically within the group for a stable render.
+    expect(offPlatform[0].names.map((n) => n.name)).toEqual(["Samsung Electronics", "SK hynix"]);
+  });
+
+  it("names over-budget ideas with the one-share DKK cost, costliest first", () => {
+    const { aboveBudget } = reachBreakdown(recs, settings);
+    expect(aboveBudget.map((n) => n.symbol)).toEqual(["ASML"]);
+    expect(aboveBudget[0].sharePriceDkk).toBeGreaterThan(5000);
+    expect(aboveBudget[0].fxApprox).toBe(true);
+  });
+
+  it("omits investable and un-priced names — only the unreachable are listed", () => {
+    const { offPlatform, aboveBudget } = reachBreakdown(recs, settings);
+    const listed = [...offPlatform.flatMap((g) => g.names), ...aboveBudget].map((n) => n.symbol);
+    expect(listed).not.toContain("TSM"); // affordable on the NYSE
+    expect(listed).not.toContain("AMD"); // tradable, no price yet (unknown, not blocked)
+  });
+
+  it("reconciles exactly with the counts from summarizeInvestability", () => {
+    const summary = summarizeInvestability(recs, settings);
+    const { offPlatform, aboveBudget } = reachBreakdown(recs, settings);
+    expect(offPlatform.reduce((n, g) => n + g.names.length, 0)).toBe(summary.offPlatform);
+    expect(aboveBudget).toHaveLength(summary.aboveBudget);
+  });
+
+  it("lists a name blocked on both gates only under the platform gate, never twice", () => {
+    // SK hynix is both Korea-listed and >5,000 DKK a share; the platform gate wins.
+    const { offPlatform, aboveBudget } = reachBreakdown(recs, settings);
+    expect(offPlatform[0].names.some((n) => n.symbol === "000660.KS")).toBe(true);
+    expect(aboveBudget.some((n) => n.symbol === "000660.KS")).toBe(false);
+  });
+
+  it("empties out when nothing is off-limits", () => {
+    const generous: BrokerSettings = { perTradeBudgetDkk: 1_000_000, untradableExchanges: [] };
+    const { offPlatform, aboveBudget } = reachBreakdown(recs, generous);
+    expect(offPlatform).toHaveLength(0);
+    expect(aboveBudget).toHaveLength(0);
   });
 });
 

@@ -224,3 +224,78 @@ export function investableSymbols(
   }
   return set;
 }
+
+/** One off-limits name, with the approximate one-share cost when it's over budget. */
+export type ReachName = {
+  symbol: string;
+  name: string;
+  /** Approximate cost of one share in DKK — present for over-budget names. */
+  sharePriceDkk?: number;
+  /** True when `sharePriceDkk` relied on an approximate (non-DKK) FX conversion. */
+  fxApprox: boolean;
+};
+
+/** Off-broker names grouped by the exchange that puts them out of reach. */
+export type ReachExchangeGroup = { exchange: string; names: ReachName[] };
+
+/**
+ * The named breakdown behind the investability counts: not just *how many* ideas
+ * are out of reach, but *which* ones and why. `summarizeInvestability` owns the
+ * counts; this names the blocked stocks so the overview can say "Korea Exchange —
+ * SK hynix, Samsung" and "over budget — ASML, 1 share ≈ DKK 12,500" instead of a
+ * bare number. Both read the same `assessInvestability`, with the same precedence
+ * (platform gate before budget gate), so the names always reconcile with the counts.
+ */
+export type ReachBreakdown = {
+  /** Off-broker names grouped by exchange; the exchange blocking the most names first. */
+  offPlatform: ReachExchangeGroup[];
+  /** Over-budget names, the costliest (highest one-share DKK price) first. */
+  aboveBudget: ReachName[];
+};
+
+/**
+ * Build the named off-limits breakdown for a set of opportunities. An idea blocked
+ * on the platform gate is listed under its exchange (never also under budget, even
+ * when a single share would also overshoot — the platform gate decides, exactly as
+ * `assessInvestability` resolves it). Investable and un-priced ideas are omitted —
+ * this is only the names you can't act on. Ordering is deterministic so the panel
+ * renders the same way every time: groups by descending block count then exchange
+ * name; over-budget by descending share price then name.
+ */
+export function reachBreakdown(
+  recommendations: Recommendation[],
+  settings: BrokerSettings,
+): ReachBreakdown {
+  const byExchange = new Map<string, ReachName[]>();
+  const aboveBudget: ReachName[] = [];
+
+  for (const rec of recommendations) {
+    const inv = assessInvestability(rec.company, settings);
+    const entry: ReachName = {
+      symbol: rec.company.symbol,
+      name: rec.company.name,
+      sharePriceDkk: inv.sharePriceDkk,
+      fxApprox: inv.fxApprox,
+    };
+    if (inv.status === "not_tradable") {
+      const list = byExchange.get(inv.exchange) ?? [];
+      list.push(entry);
+      byExchange.set(inv.exchange, list);
+    } else if (inv.status === "above_budget") {
+      aboveBudget.push(entry);
+    }
+  }
+
+  const offPlatform: ReachExchangeGroup[] = [...byExchange.entries()]
+    .map(([exchange, names]) => ({
+      exchange,
+      names: [...names].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => b.names.length - a.names.length || a.exchange.localeCompare(b.exchange));
+
+  aboveBudget.sort(
+    (a, b) => (b.sharePriceDkk ?? 0) - (a.sharePriceDkk ?? 0) || a.name.localeCompare(b.name),
+  );
+
+  return { offPlatform, aboveBudget };
+}
