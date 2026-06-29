@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPriceChart, downsample, monthsAgoIndex, type ChartDims } from "./sparkline";
+import { buildPriceChart, downsample, monthsAgoIndex, summarizeTrend, type ChartDims } from "./sparkline";
 
 const dims: ChartDims = { width: 320, height: 120, padX: 8, padTop: 10, padBottom: 18 };
 
@@ -42,6 +42,51 @@ describe("monthsAgoIndex", () => {
   it("never goes out of range", () => {
     expect(monthsAgoIndex(5, 24)).toBe(0);
     expect(monthsAgoIndex(1, 6)).toBe(0);
+  });
+});
+
+describe("summarizeTrend", () => {
+  it("returns undefined when there are fewer than two valid closes", () => {
+    expect(summarizeTrend([])).toBeUndefined();
+    expect(summarizeTrend([100])).toBeUndefined();
+    expect(summarizeTrend([NaN, 0, -5])).toBeUndefined();
+  });
+
+  it("computes the net move from the first to the last drawn close", () => {
+    const trend = summarizeTrend([100, 120, 134])!;
+    expect(trend.changePct).toBe(34);
+    expect(trend.rising).toBe(true);
+    expect(trend.startValue).toBe(100);
+    expect(trend.endValue).toBe(134);
+  });
+
+  it("marks a falling series and a negative move", () => {
+    const trend = summarizeTrend([200, 150, 160])!;
+    expect(trend.rising).toBe(false);
+    expect(trend.changePct).toBe(-20);
+  });
+
+  it("places the latest price within the series' own low→high band", () => {
+    // Latest (160) sits between low 100 and high 200 → halfway.
+    expect(summarizeTrend([100, 200, 160])!.rangePosition).toBeCloseTo(0.6, 5);
+    // Latest is the high → top of the band.
+    expect(summarizeTrend([100, 120, 150])!.rangePosition).toBe(1);
+    // Latest is the low → bottom of the band.
+    expect(summarizeTrend([150, 120, 100])!.rangePosition).toBe(0);
+  });
+
+  it("uses the same finite-positive filter as the chart, ignoring junk closes", () => {
+    const trend = summarizeTrend([100, NaN, 0, -5, 110])!;
+    expect(trend.startValue).toBe(100);
+    expect(trend.endValue).toBe(110);
+    expect(trend.changePct).toBe(10);
+  });
+
+  it("leaves the range position undefined for a flat series", () => {
+    const trend = summarizeTrend([50, 50, 50])!;
+    expect(trend.changePct).toBe(0);
+    expect(trend.rising).toBe(true);
+    expect(trend.rangePosition).toBeUndefined();
   });
 });
 

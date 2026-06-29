@@ -38,6 +38,46 @@ export type PriceChart = {
   yFor: (value: number) => number;
 };
 
+/** A compact, measured read of a price series — the numbers a lead card's
+ *  trajectory strip is annotated with, kept pure so the caption can never drift
+ *  from the line it sits under. */
+export type TrendSummary = {
+  /** Net percentage move from the first drawn close to the last (the latest price). */
+  changePct: number;
+  /** True when the series ended at or above where it began. */
+  rising: boolean;
+  /** First (oldest) and last (latest) finite, positive closes actually drawn. */
+  startValue: number;
+  endValue: number;
+  /** Where the latest price sits inside the series' own low→high band, 0 (at the
+   *  series low) to 1 (at the series high). Undefined when the band is degenerate. */
+  rangePosition?: number;
+};
+
+/**
+ * Summarize a price series for the lead-card trajectory caption: the net move
+ * across the drawn window and the latest price's position within the window's
+ * own high/low. Pure and unit-tested, drawn from the SAME cleaned series
+ * `buildPriceChart` plots (finite, positive, in order), so the number under the
+ * line always matches the line. Returns undefined when fewer than two valid
+ * closes exist — the honest "no trend yet" case the UI renders as empty.
+ */
+export function summarizeTrend(values: number[]): TrendSummary | undefined {
+  const series = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (series.length < 2) return undefined;
+
+  const startValue = series[0];
+  const endValue = series[series.length - 1];
+  const changePct = ((endValue - startValue) / startValue) * 100;
+
+  const low = Math.min(...series);
+  const high = Math.max(...series);
+  const span = high - low;
+  const rangePosition = span > 0 ? clamp((endValue - low) / span, 0, 1) : undefined;
+
+  return { changePct: round(changePct), rising: endValue >= startValue, startValue, endValue, rangePosition };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
