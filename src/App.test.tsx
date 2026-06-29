@@ -10,49 +10,67 @@ afterEach(() => {
   localStorage.clear();
 });
 
+// A ledger row (holding or opportunity) is the redesign's clickable table row.
+function ledgerRows(scope: HTMLElement = document.body): HTMLElement[] {
+  return within(scope)
+    .getAllByRole("button")
+    .filter((button) => button.classList.contains("lt-row"));
+}
+
+// Open NVIDIA's detail by clicking its holding row in the ledger.
+function openNvidiaDetail() {
+  fireEvent.click(screen.getByRole("button", { name: /NVIDIA Corp\..*open detail/i }));
+}
+
+// The company detail view is in front when its back link is present.
+function detailIsOpen() {
+  return screen.getByRole("button", { name: /back to holdings/i });
+}
+
 describe("App", () => {
-  it("renders the decision-first dashboard with the insights band and a holding", () => {
+  it("renders the Portfolio Ledger chrome, the holdings table and the rail", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: /personal stock dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /what saxo doesn.t tell you/i })).toBeInTheDocument();
-    expect(screen.getByText(/EIFO compliance is built in/i)).toBeInTheDocument();
-    // The top holding now appears both in the holdings list and in the
-    // concentration synthesis, so there may be more than one occurrence.
+    expect(screen.getByRole("heading", { name: /the portfolio ledger/i })).toBeInTheDocument();
+    // The NAV hero carries the real net asset value figure.
+    expect(screen.getByText(/net asset value · dkk/i)).toBeInTheDocument();
+    // The "What Saxo won't say" synthesis now lives in the portfolio rail.
+    expect(screen.getByRole("heading", { name: /what saxo won.t say/i })).toBeInTheDocument();
+    // The top holding appears in the holdings table.
     expect(screen.getAllByText(/NVIDIA Corp\./i).length).toBeGreaterThanOrEqual(1);
-    // The value-add insights are present.
+    // The rail briefs are present.
     expect(screen.getByText(/Needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Top opportunity/i)).toBeInTheDocument();
     expect(screen.getByText(/Concentration/i)).toBeInTheDocument();
-    expect(screen.getByText(/in NVIDIA Corp\./i)).toBeInTheDocument();
+    expect(screen.getByText(/EIFO compliance/i)).toBeInTheDocument();
+    // The concentration brief names the largest position.
+    expect(screen.getByText(/\d+% in NVIDIA/i)).toBeInTheDocument();
   });
 
-  it("exposes the model score to assistive technology, one ring per holding card", () => {
+  it("exposes each holding's model score to assistive technology via the row name", () => {
     render(<App />);
 
-    // The score ring is the dashboard's central decision metric; it must carry
-    // an accessible name so screen-reader users hear the score, not nothing.
-    // Exact-name match guards against the inner <text> leaking back into the
-    // announcement (which would read as a bare, context-free number).
-    const scores = screen.getAllByRole("img", { name: /^Score \d+ of 100$/ });
-    const cards = screen.getAllByRole("button").filter((button) => button.classList.contains("decision-card"));
-    expect(cards.length).toBeGreaterThan(0);
-    expect(scores.length).toBe(cards.length);
+    // The redesign replaces the per-card score ring with a number + microbar; the
+    // score must still reach screen-reader users, so every clickable holding row
+    // carries it in its accessible name.
+    const rows = ledgerRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => /score \d+/i.test(row.getAttribute("aria-label") ?? ""))).toBe(true);
   });
 
-  it("exposes the model score in the company detail view", () => {
+  it("shows the model score in the company detail hero", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
-    // The detail hero shows exactly one score ring with a clean accessible name.
-    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+    openNvidiaDetail();
+    expect(detailIsOpen()).toBeInTheDocument();
+    // The hero shows the big score out of 100.
+    expect(screen.getByText("/100")).toBeInTheDocument();
   });
 
   it("shows where a holding sits within the book when opened", () => {
     render(<App />);
 
-    // Open the largest position straight from the concentration synthesis card.
-    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+    openNvidiaDetail();
 
     const context = screen.getByLabelText(/this holding within your portfolio/i);
     expect(within(context).getByText(/in your portfolio/i)).toBeInTheDocument();
@@ -66,13 +84,16 @@ describe("App", () => {
   it("explains the score by weighted contribution in the detail view", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+    openNvidiaDetail();
 
     const analysis = screen.getByText(/why this score/i).closest("article")!;
     // The score breakdown caption and the raw input-level caption both appear,
     // so the two complementary charts are distinguishable.
     expect(within(analysis).getByText(/weighted pull on the score/i)).toBeInTheDocument();
-    expect(within(analysis).getByText(/input levels/i)).toBeInTheDocument();
+    // The card title and the raw input-level sub-caption both mention "input
+    // levels"; assert the sub-caption form (with the 0–100 parenthetical) so the
+    // two complementary charts stay distinguishable.
+    expect(within(analysis).getByText(/^Input levels \(0/i)).toBeInTheDocument();
     // At least one factor lifts the score (+) and at least one drags it (−).
     expect(within(analysis).getAllByText(/^\+\d/).length).toBeGreaterThan(0);
     expect(within(analysis).getAllByText(/^−\d/).length).toBeGreaterThan(0);
@@ -83,7 +104,7 @@ describe("App", () => {
   it("ranks a holding against its theme peers and labels the comparison", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+    openNvidiaDetail();
 
     const peers = screen.getByLabelText(/theme peers in ai infrastructure/i);
     // The ladder states the rank and reuses the map's ownership vocabulary.
@@ -99,11 +120,11 @@ describe("App", () => {
   it("groups opportunities by theme, leads with a standout, and surfaces blind spots", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
 
     const panel = screen.getByLabelText(/^Opportunities$/i);
     // Leads with the single featured idea you don't own.
-    expect(within(panel).getByText(/standout idea/i)).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: /standout idea/i })).toBeInTheDocument();
     // The overview summary counts ideas and themes.
     expect(within(panel).getByText(/ideas across/i)).toBeInTheDocument();
     // At least one theme is a blind spot the user holds nothing in.
@@ -111,23 +132,17 @@ describe("App", () => {
 
     // No silent slicing: every non-owned name in the demo universe is shown as a
     // row (13 = 19 curated names − 6 demo holdings), not capped at ten.
-    const cards = within(panel)
-      .getAllByRole("button")
-      .filter((button) => button.classList.contains("decision-card"));
-    expect(cards).toHaveLength(13);
+    expect(ledgerRows(panel)).toHaveLength(13);
 
     // Opening a name from a theme group routes to its detail view.
-    fireEvent.click(cards[0]);
-    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+    fireEvent.click(ledgerRows(panel)[0]);
+    expect(detailIsOpen()).toBeInTheDocument();
   });
 
   it("summarises what you can act on and flags off-platform ideas without hiding them", () => {
     render(<App />);
 
-    // Front page: the investability card is part of the "what Saxo doesn't tell you" band.
-    expect(screen.getByText(/Investable now/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
     const panel = screen.getByLabelText(/^Opportunities$/i);
 
     // The readout names how many ideas you can act on.
@@ -135,20 +150,16 @@ describe("App", () => {
     // The Korea-listed names (Samsung, SK hynix) are off Saxo — flagged, not hidden.
     expect(within(panel).getAllByText(/off saxo/i).length).toBeGreaterThan(0);
     // Even off-limits, every non-owned name is still shown (honest, not silently dropped).
-    const cards = within(panel)
-      .getAllByRole("button")
-      .filter((button) => button.classList.contains("decision-card"));
-    expect(cards).toHaveLength(13);
-    // Off-limits cards are visually demoted via a class, not removed from the DOM.
-    expect(cards.some((card) => card.classList.contains("off-limits"))).toBe(true);
+    const rows = ledgerRows(panel);
+    expect(rows).toHaveLength(13);
+    // Off-limits rows are visually demoted via a class, not removed from the DOM.
+    expect(rows.some((row) => row.classList.contains("off-limits"))).toBe(true);
 
     // The hide toggle removes them on demand, then the count drops below 13.
     fireEvent.click(within(panel).getByLabelText(/hide off-limits/i));
-    const after = within(screen.getByLabelText(/^Opportunities$/i))
-      .getAllByRole("button")
-      .filter((button) => button.classList.contains("decision-card"));
+    const after = ledgerRows(screen.getByLabelText(/^Opportunities$/i));
     expect(after.length).toBeLessThan(13);
-    expect(after.some((card) => card.classList.contains("off-limits"))).toBe(false);
+    expect(after.some((row) => row.classList.contains("off-limits"))).toBe(false);
   });
 
   it("flags an above-budget name when live prices load and lets the user raise the budget", async () => {
@@ -163,9 +174,9 @@ describe("App", () => {
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
     render(<App />);
-    await screen.findByText(/Live data/i);
+    await screen.findByText(/LIVE · YHOO/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
     const panel = screen.getByLabelText(/^Opportunities$/i);
     // One whole share already overshoots the per-trade budget.
     expect(within(panel).getAllByText(/1 share > budget/i).length).toBeGreaterThan(0);
@@ -189,10 +200,10 @@ describe("App", () => {
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
     render(<App />);
-    await screen.findByText(/Live data/i);
+    await screen.findByText(/LIVE · YHOO/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
-    fireEvent.click(screen.getByText(/Advanced Micro Devices/i));
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced Micro Devices.*open detail/i }));
 
     // The detail view sizes the position to the per-trade slot, not just the score.
     const plan = screen.getByLabelText(/buy plan for your per-trade slot/i);
@@ -204,6 +215,8 @@ describe("App", () => {
 
   it("marks a market off-platform from the broker settings, and clears it again", () => {
     render(<App />);
+    // The broker & budget settings now live in the Opportunities view.
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
 
     // The chips live inside a collapsed disclosure; query including hidden nodes.
     const nasdaq = () => screen.getByRole("button", { name: /^NASDAQ$/i, hidden: true });
@@ -222,12 +235,9 @@ describe("App", () => {
 
   it("lets the user add their own name, scores it like any opportunity, and removes it", () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /^Opportunities$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
 
-    const cardCount = () =>
-      within(screen.getByLabelText(/^Opportunities$/i))
-        .getAllByRole("button")
-        .filter((button) => button.classList.contains("decision-card")).length;
+    const cardCount = () => ledgerRows(screen.getByLabelText(/^Opportunities$/i)).length;
     const before = cardCount();
 
     // Type a name that isn't in the curated universe and add it.
@@ -235,7 +245,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText(/ticker symbol/i), { target: { value: "net" } });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 
-    // It joins the opportunity set as a new, scored card flagged "Added by you".
+    // It joins the opportunity set as a new, scored row flagged "Added by you".
     const panel = screen.getByLabelText(/^Opportunities$/i);
     expect(cardCount()).toBe(before + 1);
     expect(within(panel).getAllByText(/added by you/i).length).toBeGreaterThan(0);
@@ -250,7 +260,7 @@ describe("App", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/already in the curated set/i);
 
     // Adding a name the user already holds (NVDA is a demo holding) is rejected
-    // as owned — so it never becomes a chip with no matching opportunity card.
+    // as owned — so it never becomes a chip with no matching opportunity row.
     fireEvent.change(screen.getByLabelText(/company name/i), { target: { value: "NVIDIA" } });
     fireEvent.change(screen.getByLabelText(/ticker symbol/i), { target: { value: "NVDA" } });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
@@ -265,7 +275,7 @@ describe("App", () => {
   it("plots holdings and opportunities on the decision map and opens a name", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Map$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Map/ }));
 
     // The plane and its quadrant labels render.
     expect(screen.getByLabelText(/^Decision map$/i)).toBeInTheDocument();
@@ -279,13 +289,13 @@ describe("App", () => {
 
     // Clicking a marker opens that company's detail view.
     fireEvent.click(nvidia);
-    expect(screen.getAllByRole("img", { name: /^Score \d+ of 100$/ })).toHaveLength(1);
+    expect(detailIsOpen()).toBeInTheDocument();
   });
 
   it("compares two names head to head with a tale-of-the-tape and a verdict", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Compare$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Compare/ }));
 
     const panel = screen.getByLabelText(/compare two names/i);
     // Two pickers, defaulting to one name vs another.
@@ -306,7 +316,7 @@ describe("App", () => {
   it("re-runs the comparison when you pick a different name", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Compare$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Compare/ }));
     const panel = screen.getByLabelText(/compare two names/i);
     const [first] = within(panel).getAllByRole("combobox");
 
@@ -320,7 +330,7 @@ describe("App", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no server")));
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText(/Editorial estimates/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/EDITORIAL · NPM RUN REFRESH/i)).toBeInTheDocument());
   });
 
   it("flags live data when a refresh snapshot is present", async () => {
@@ -346,7 +356,7 @@ describe("App", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
     render(<App />);
 
-    expect(await screen.findByText(/Live data/i)).toBeInTheDocument();
+    expect(await screen.findByText(/LIVE · YHOO/i)).toBeInTheDocument();
   });
 
   it("draws the annotated price-path chart when history is present", async () => {
@@ -374,8 +384,8 @@ describe("App", () => {
     render(<App />);
 
     // Wait for the live snapshot to merge, then open NVIDIA's detail view.
-    await screen.findByText(/Live data/i);
-    fireEvent.click(screen.getByText(/in NVIDIA Corp\./i));
+    await screen.findByText(/LIVE · YHOO/i);
+    openNvidiaDetail();
 
     // The chart is exposed as a single labelled image describing the price path
     // and the 52-week range it is annotated with.

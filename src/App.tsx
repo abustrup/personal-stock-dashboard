@@ -2,24 +2,17 @@ import {
   AlertTriangle,
   Ban,
   BookmarkPlus,
-  BriefcaseBusiness,
-  Compass,
   FileUp,
   GitCompareArrows,
   Landmark,
   Plus,
-  Radar,
   RotateCcw,
-  ScatterChart,
-  Search,
-  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
-  TriangleAlert,
   Wallet,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
@@ -67,13 +60,48 @@ import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation
 
 type View = "portfolio" | "opportunities" | "map" | "compare" | "detail";
 
-const tabs: Array<{ id: View; label: string; icon: typeof BriefcaseBusiness }> = [
-  { id: "portfolio", label: "Portfolio", icon: BriefcaseBusiness },
-  { id: "opportunities", label: "Opportunities", icon: Radar },
-  { id: "map", label: "Map", icon: ScatterChart },
-  { id: "compare", label: "Compare", icon: GitCompareArrows },
-  { id: "detail", label: "Company", icon: Search },
+const tabs: Array<{ id: View; label: string }> = [
+  { id: "portfolio", label: "Portfolio" },
+  { id: "opportunities", label: "Opportunities" },
+  { id: "map", label: "Map" },
+  { id: "compare", label: "Compare" },
+  { id: "detail", label: "Company" },
 ];
+
+// Verdict → 3px microbar fill (the small list bars). Matches the prototype's BAR map.
+const VERDICT_BAR: Record<Recommendation["action"], string> = {
+  increase: "#2f8d61",
+  investigate: "#2f5fd0",
+  hold: "#aab2bc",
+  watch: "#aab2bc",
+  trim: "#c0473c",
+  avoid: "#c0473c",
+};
+
+// Full region names → the 2-letter codes the opportunity table shows. Falls back
+// to the first two letters so an unmapped region still renders something sane.
+const REGION_CODES: Record<string, string> = {
+  "United States": "US",
+  Netherlands: "NL",
+  Taiwan: "TW",
+  "United Kingdom": "UK",
+  Norway: "NO",
+  Denmark: "DK",
+  Sweden: "SE",
+  Germany: "DE",
+  France: "FR",
+  Switzerland: "CH",
+  "South Korea": "KR",
+  Japan: "JP",
+  China: "CN",
+  Ireland: "IE",
+  Israel: "IL",
+  Canada: "CA",
+};
+
+function regionCode(region: string): string {
+  return REGION_CODES[region] ?? region.slice(0, 2).toUpperCase();
+}
 
 // How many non-owned opportunities to plot on the decision map. Owned holdings
 // are always all shown; opportunities are ranked and capped so the plane stays
@@ -188,15 +216,6 @@ export default function App() {
     () => summarizeInvestability(model.opportunities, brokerSettings),
     [model.opportunities, brokerSettings],
   );
-  // The concrete buy plan for the best idea you can act on — sized to the per-trade
-  // slot and the current book — so the front-page card states shares, not just a name.
-  const topInvestablePlan = useMemo(
-    () =>
-      investSummary.topInvestable
-        ? planPosition(investabilityFor(investSummary.topInvestable.company), model.totalMarketValueDkk)
-        : undefined,
-    [investSummary.topInvestable, investabilityFor, model.totalMarketValueDkk],
-  );
   const visibleOpportunities = useMemo(
     () => (hideOffLimits ? model.opportunities.filter((rec) => oppInvestableSet.has(rec.company.symbol)) : model.opportunities),
     [hideOffLimits, model.opportunities, oppInvestableSet],
@@ -264,22 +283,45 @@ export default function App() {
     setView("portfolio");
   }
 
+  // NAV-hero deltas, all from real model totals. Today's percent is derived from
+  // the aggregate day gain against yesterday's value (NAV minus today's gain).
+  const navToday =
+    model.totalMarketValueDkk - model.dayGainDkk > 0
+      ? (model.dayGainDkk / (model.totalMarketValueDkk - model.dayGainDkk)) * 100
+      : 0;
+  // A measured DKK NAV series for the hero sparkline — undefined in demo mode
+  // (no fetched history), in which case the inset shows a graceful empty state.
+  const navSeries = useMemo(() => buildPortfolioSeries(model.portfolio), [model.portfolio]);
+
+  const tabCounts: Partial<Record<View, number>> = {
+    portfolio: model.portfolio.length,
+    opportunities: model.opportunities.length,
+    map: model.portfolio.length + Math.min(model.opportunities.length, MAP_OPPORTUNITY_LIMIT),
+  };
+  const topOpportunitySymbol = insights.topOpportunity?.company.symbol;
+
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Decision support beyond your broker</p>
-          <h1>Personal Stock Dashboard</h1>
+          <p className="eyebrow">Decision support · beyond your broker</p>
+          <h1 className="wordmark">The Portfolio Ledger</h1>
         </div>
         <div className="topbar-actions">
+          <span className={`live${hasLiveMarket ? "" : " stale"}`} aria-label="data freshness">
+            <span className="live-dot" aria-hidden="true" />
+            {hasLiveMarket
+              ? `LIVE · YHOO${dataAsOf ? ` · ${formatLiveStamp(dataAsOf)}` : ""}`
+              : "EDITORIAL · NPM RUN REFRESH"}
+          </span>
           {!source.isDemo && (
             <button className="ghost" type="button" onClick={resetToDemo} title="Forget the saved portfolio">
-              <RotateCcw aria-hidden="true" size={15} />
+              <RotateCcw aria-hidden="true" size={14} />
               <span>Reset</span>
             </button>
           )}
           <label className="upload">
-            <FileUp aria-hidden="true" size={17} />
+            <FileUp aria-hidden="true" size={15} />
             <span>Import CSV</span>
             <input
               type="file"
@@ -290,195 +332,402 @@ export default function App() {
         </div>
       </header>
 
-      <section className="notice" aria-label="compliance notice">
-        <ShieldAlert size={20} aria-hidden="true" />
-        <div>
-          <strong>EIFO compliance is built in — your broker has no idea about it.</strong>
-          <span>
-            Blocks the policy negative list, flags possible overlap, and never clears a company without current EIFO
-            lists.
-          </span>
-        </div>
-      </section>
-
-      <section className="insights" aria-label="what your broker doesn't tell you">
-        <div className="insights-head">
-          <h2>What Saxo doesn&apos;t tell you</h2>
-          <span className={hasLiveMarket ? "fresh tone-up" : "fresh muted"}>
-            {hasLiveMarket
-              ? `Live data${dataAsOf ? ` · ${formatAsOf(dataAsOf)}` : ""}`
-              : "Editorial estimates · run npm run refresh"}
-          </span>
-        </div>
-        <div className="insight-grid">
-          <InsightCard
-            icon={TriangleAlert}
-            tone={insights.needsAttention.count > 0 ? "warn" : "calm"}
-            label="Needs attention"
-            value={insights.needsAttention.count > 0 ? `${insights.needsAttention.count} to review` : "All clear"}
-            detail={
-              insights.needsAttention.top
-                ? `${insights.needsAttention.top.action} · ${insights.needsAttention.top.company.name}`
-                : "Nothing flagged to trim or avoid"
-            }
-            onClick={() => open(insights.needsAttention.top?.company.symbol)}
-          />
-          <InsightCard
-            icon={insights.compliance.count > 0 ? ShieldAlert : ShieldCheck}
-            tone={insights.compliance.count > 0 ? "warn" : "calm"}
-            label="EIFO compliance"
-            value={insights.compliance.count > 0 ? `${insights.compliance.count} flagged` : "None flagged"}
-            detail={
-              insights.compliance.top
-                ? `${insights.compliance.top.compliance.status.replace("_", " ")} · ${insights.compliance.top.company.name}`
-                : "No holding blocked or overlapping"
-            }
-            onClick={() => open(insights.compliance.top?.company.symbol)}
-          />
-          <InsightCard
-            icon={Radar}
-            tone="idea"
-            label="Top opportunity"
-            value={insights.topOpportunity ? insights.topOpportunity.company.name : "—"}
-            detail={topOpportunityDetail(insights.topOpportunity, investabilityFor)}
-            onClick={() => open(insights.topOpportunity?.company.symbol)}
-          />
-          <InsightCard
-            icon={Compass}
-            tone={insights.concentration?.concentrated ? "warn" : "neutral"}
-            label="Concentration"
-            value={
-              insights.concentration
-                ? `${insights.concentration.weightPct.toFixed(0)}% in ${insights.concentration.top.company.name}`
-                : "—"
-            }
-            detail={
-              insights.concentration
-                ? `${insights.concentration.concentrated ? "Concentrated" : "Diversified"} · top 3 = ${insights.concentration.topThreeWeightPct.toFixed(0)}%${insights.tilt ? ` · ${prettyTheme(insights.tilt.theme)} tilt` : ""}`
-                : "Import a portfolio to see concentration"
-            }
-            onClick={() => open(insights.concentration?.top.company.symbol)}
-          />
-          <InsightCard
-            icon={Wallet}
-            tone={investSummary.offPlatform + investSummary.aboveBudget > 0 ? "neutral" : "calm"}
-            label="Investable now"
-            value={`${investSummary.investable} of ${investSummary.total}`}
-            detail={investableDetail(investSummary, topInvestablePlan)}
-            onClick={() => setView("opportunities")}
-          />
-        </div>
-      </section>
+      <NavHero
+        valueDkk={model.totalMarketValueDkk}
+        totalPct={model.totalReturnPct}
+        totalGainDkk={model.totalGainDkk}
+        todayPct={navToday}
+        series={navSeries}
+      />
 
       <nav className="tabs" aria-label="dashboard views">
         {tabs.map((tab) => {
-          const Icon = tab.icon;
+          const count = tabCounts[tab.id];
+          const active = view === tab.id;
           return (
             <button
               key={tab.id}
-              className={view === tab.id ? "tab active" : "tab"}
+              className={active ? "tab active" : "tab"}
               type="button"
-              aria-current={view === tab.id ? "page" : undefined}
+              aria-current={active ? "page" : undefined}
               onClick={() => setView(tab.id)}
             >
-              <Icon aria-hidden="true" size={17} />
               <span>{tab.label}</span>
+              {count !== undefined && <span className="tab-count">{count}</span>}
             </button>
           );
         })}
       </nav>
 
       <p className="source-line">
-        <span>
-          {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} · {formatSignedPct(model.totalReturnPct)} total
-        </span>
+        {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} · {formatSignedPct(model.totalReturnPct)} total
       </p>
 
-      <BrokerBar
-        settings={brokerSettings}
-        markets={knownMarkets}
-        onChange={updateBrokerSettings}
-      />
-
-      {view === "portfolio" && (
-        <DecisionList title="Your holdings" subtitle="Ranked by what to do next" items={model.portfolio} onSelect={open} />
-      )}
-      {view === "opportunities" && (
-        <OpportunitiesOverview
-          overview={opportunityOverview}
-          summary={investSummary}
-          settings={brokerSettings}
-          investabilityFor={investabilityFor}
-          bookValueDkk={model.totalMarketValueDkk}
-          hideOffLimits={hideOffLimits}
-          onToggleOffLimits={setHideOffLimits}
-          watchlist={watchlist}
-          markets={knownMarkets}
-          onAddWatch={addToWatchlist}
-          onRemoveWatch={removeFromWatchlist}
-          onSelect={open}
-        />
-      )}
-      {view === "map" && (
-        <DecisionMap
-          portfolio={model.portfolio}
-          opportunities={model.opportunities}
-          opportunityLimit={MAP_OPPORTUNITY_LIMIT}
-          onSelect={open}
-        />
-      )}
-      {view === "compare" && leftRec && rightRec && comparison && (
-        <CompareView
-          left={leftRec}
-          right={rightRec}
-          comparison={comparison}
-          options={model.all}
-          onChangeLeft={setCompareA}
-          onChangeRight={setCompareB}
-          onSwap={() => {
-            setCompareA(rightRec.company.symbol);
-            setCompareB(leftRec.company.symbol);
-          }}
-          onSelect={open}
-        />
-      )}
-      {view === "detail" && selected && (
-        <CompanyDetail
-          recommendation={selected}
-          context={insights.holdingContexts.get(selected.company.symbol)}
-          peers={peerComparison}
-          investability={selected.holding ? undefined : investabilityFor(selected.company)}
-          bookValueDkk={model.totalMarketValueDkk}
-          onSelect={open}
-        />
-      )}
+      <div className="view" key={view}>
+        {view === "portfolio" && (
+          <PortfolioView portfolio={model.portfolio} insights={insights} onSelect={open} />
+        )}
+        {view === "opportunities" && (
+          <OpportunitiesOverview
+            overview={opportunityOverview}
+            summary={investSummary}
+            settings={brokerSettings}
+            markets={knownMarkets}
+            onChangeSettings={updateBrokerSettings}
+            investabilityFor={investabilityFor}
+            bookValueDkk={model.totalMarketValueDkk}
+            hideOffLimits={hideOffLimits}
+            onToggleOffLimits={setHideOffLimits}
+            watchlist={watchlist}
+            onAddWatch={addToWatchlist}
+            onRemoveWatch={removeFromWatchlist}
+            onSelect={open}
+          />
+        )}
+        {view === "map" && (
+          <DecisionMap
+            portfolio={model.portfolio}
+            opportunities={model.opportunities}
+            opportunityLimit={MAP_OPPORTUNITY_LIMIT}
+            topOpportunitySymbol={topOpportunitySymbol}
+            onSelect={open}
+          />
+        )}
+        {view === "compare" && leftRec && rightRec && comparison && (
+          <CompareView
+            left={leftRec}
+            right={rightRec}
+            comparison={comparison}
+            options={model.all}
+            onChangeLeft={setCompareA}
+            onChangeRight={setCompareB}
+            onSwap={() => {
+              setCompareA(rightRec.company.symbol);
+              setCompareB(leftRec.company.symbol);
+            }}
+            onSelect={open}
+          />
+        )}
+        {view === "detail" && selected && (
+          <CompanyDetail
+            recommendation={selected}
+            context={insights.holdingContexts.get(selected.company.symbol)}
+            peers={peerComparison}
+            investability={selected.holding ? undefined : investabilityFor(selected.company)}
+            bookValueDkk={model.totalMarketValueDkk}
+            onBack={() => setView("portfolio")}
+            onSelect={open}
+          />
+        )}
+      </div>
     </main>
   );
 }
 
-function InsightCard({
-  icon: Icon,
+// The persistent NAV hero: the real net asset value and its deltas (all from the
+// model's measured totals), plus a trailing-year sparkline of the portfolio's DKK
+// value. The sparkline is drawn only from a measured series — in demo mode (no
+// fetched price history) it shows an honest empty state rather than a fake line.
+function NavHero({
+  valueDkk,
+  totalPct,
+  totalGainDkk,
+  todayPct,
+  series,
+}: {
+  valueDkk: number;
+  totalPct: number;
+  totalGainDkk: number;
+  todayPct: number;
+  series?: number[];
+}) {
+  return (
+    <section className="hero" aria-label="net asset value">
+      <div>
+        <p className="hero-label">Net asset value · DKK</p>
+        <div className="nav-figure">
+          <span className="nav-cur">kr</span>
+          <span className="nav-value">{formatNumber(valueDkk)}</span>
+        </div>
+        <div className="nav-deltas">
+          <span className={`nav-delta ${totalPct >= 0 ? "up" : "down"}`}>
+            <span className="arrow" aria-hidden="true">
+              {totalPct >= 0 ? "▲" : "▼"}
+            </span>
+            {formatSignedPct(totalPct)} <span className="unit">total</span>
+          </span>
+          <span className="nav-sep" aria-hidden="true">
+            |
+          </span>
+          <span className={totalGainDkk >= 0 ? "tone-up" : "tone-down"} style={{ fontWeight: 500 }}>
+            {totalGainDkk >= 0 ? "+" : "−"}kr {formatNumber(Math.abs(totalGainDkk))}
+          </span>
+          <span className="nav-sep" aria-hidden="true">
+            |
+          </span>
+          <span className={`nav-delta ${todayPct >= 0 ? "up" : "down"}`}>
+            <span className="arrow" aria-hidden="true">
+              {todayPct >= 0 ? "▲" : "▼"}
+            </span>
+            {formatSignedPct(todayPct)} <span className="unit">today</span>
+          </span>
+        </div>
+      </div>
+      <NavSpark series={series} totalPct={totalPct} />
+    </section>
+  );
+}
+
+const SPARK_DIMS: ChartDims = { width: 340, height: 80, padX: 6, padTop: 6, padBottom: 6 };
+
+function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number }) {
+  const chart = series && series.length >= 2 ? buildPriceChart(series, SPARK_DIMS) : undefined;
+  const [startLabel, endLabel] = trailingMonthLabels();
+  const rising = chart ? chart.last.value >= chart.first.value : totalPct >= 0;
+  return (
+    <div className="nav-spark">
+      <div className="nav-spark-head">
+        <span>Portfolio · trailing 12 months</span>
+        <span className={`total ${totalPct >= 0 ? "tone-up" : "tone-down"}`}>{formatSignedPct(totalPct)}</span>
+      </div>
+      {chart ? (
+        <>
+          <svg viewBox={`0 0 ${SPARK_DIMS.width} ${SPARK_DIMS.height}`} preserveAspectRatio="none" aria-hidden="true">
+            <path d={chart.areaPath} fill={rising ? "#e8f1ec" : "#f7e6e2"} />
+            <path
+              d={chart.linePath}
+              fill="none"
+              stroke={rising ? "#1f7a52" : "#b3322a"}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            <circle cx={chart.last.x} cy={chart.last.y} r={3.5} fill={rising ? "#1f7a52" : "#b3322a"} />
+          </svg>
+          <div className="nav-spark-axis">
+            <span>{startLabel}</span>
+            <span>{endLabel}</span>
+          </div>
+        </>
+      ) : (
+        <div className="nav-spark-empty">No price history yet — run npm run refresh to chart the trailing year.</div>
+      )}
+    </div>
+  );
+}
+
+// The Portfolio view: the holdings ledger on the left, the "What Saxo won't say"
+// rail on the right. Both read entirely from the dashboard model and buildInsights
+// — the rail surfaces the top opportunity, what needs attention, concentration and
+// EIFO posture, the synthesis a broker's holdings screen never draws.
+function PortfolioView({
+  portfolio,
+  insights,
+  onSelect,
+}: {
+  portfolio: Recommendation[];
+  insights: ReturnType<typeof buildInsights>;
+  onSelect: (symbol: string) => void;
+}) {
+  const { needsAttention, concentration, compliance, tilt, topOpportunity } = insights;
+  return (
+    <div className="portfolio-grid">
+      <section className="holdings" aria-label="Your holdings">
+        <div className="holdings-head">
+          <h2>Your holdings</h2>
+          <span className="ranked">Ranked by model score</span>
+        </div>
+        {portfolio.length === 0 ? (
+          <p className="empty">Import a portfolio to see your holdings ranked.</p>
+        ) : (
+          <>
+            <div className="ledger-scroll">
+              <div className="lt-head holding" role="row">
+                <span>Company</span>
+                <span>Verdict</span>
+                <span>Score</span>
+                <span className="num total-col">Total</span>
+                <span className="num">Today</span>
+                <span className="num">Weight</span>
+                <span aria-hidden="true" />
+              </div>
+              {portfolio.map((item) => (
+                <LedgerRow key={item.company.symbol} item={item} variant="holding" onSelect={onSelect} />
+              ))}
+            </div>
+            <p className="lt-foot">
+              SCORE blends measured momentum, growth, quality, valuation &amp; balance-sheet risk with editorial
+              AI-exposure and geopolitics. VERDICT is the model&apos;s, not your broker&apos;s. Click any holding for the
+              full breakdown.
+            </p>
+          </>
+        )}
+      </section>
+
+      <aside className="rail" aria-label="What Saxo won't say">
+        <h2>What Saxo won&apos;t say</h2>
+
+        {topOpportunity && (
+          <button type="button" className="rail-top" onClick={() => onSelect(topOpportunity.company.symbol)}>
+            <div className="rail-top-eyebrow">↗ Top opportunity</div>
+            <div className="rail-top-name">{topOpportunity.company.name}</div>
+            <div className="rail-top-meta">
+              SCORE {topOpportunity.score} · {topOpportunity.action.toUpperCase()} · NOT OWNED
+            </div>
+            <div className="rail-top-why">{topOpportunity.headline}</div>
+          </button>
+        )}
+
+        <RailBrief
+          eyebrow="Needs attention"
+          tone={needsAttention.count > 0 ? "warn" : "calm"}
+          headline={
+            needsAttention.count > 0 && needsAttention.top ? (
+              <>
+                {needsAttention.count} to review —{" "}
+                <span className="tone-down">
+                  {needsAttention.top.action} {shortName(needsAttention.top.company.name)}
+                </span>
+              </>
+            ) : (
+              "All clear"
+            )
+          }
+          note={
+            needsAttention.top
+              ? `${needsAttention.top.company.name} is the model's lowest score in the book (${needsAttention.top.score}).`
+              : "Nothing in the book is flagged to trim or avoid."
+          }
+          onClick={() => onSelect(needsAttention.top?.company.symbol ?? "")}
+        />
+
+        {concentration && (
+          <RailBrief
+            eyebrow="Concentration"
+            tone="neutral"
+            headline={`${concentration.weightPct.toFixed(0)}% in ${shortName(concentration.top.company.name)}`}
+            note={`Top three names are ${concentration.topThreeWeightPct.toFixed(0)}% of the book${
+              tilt ? ` — a pronounced ${prettyTheme(tilt.theme)} tilt` : ""
+            }.`}
+            onClick={() => onSelect(concentration.top.company.symbol)}
+          />
+        )}
+
+        <RailBrief
+          eyebrow="EIFO compliance"
+          tone={compliance.count > 0 ? "warn" : "calm"}
+          headline={compliance.count > 0 ? `${compliance.count} flagged` : "None flagged"}
+          note={
+            compliance.count > 0 && compliance.top
+              ? `${compliance.top.compliance.status.replace("_", " ")} · ${compliance.top.company.name}.`
+              : 'No holding is blocked or in possible overlap — but no name is ever called "clean".'
+          }
+          onClick={() => onSelect(compliance.top?.company.symbol ?? "")}
+        />
+      </aside>
+    </div>
+  );
+}
+
+// One clickable row in a ledger table — shared by the holdings and opportunity
+// tables. The score becomes a number + a 3px microbar (replacing the old ring in
+// lists); badges for user-added, EIFO flags and investability gates sit inline
+// with the name. Columns differ by variant; every value is the model's own.
+function LedgerRow({
+  item,
+  variant,
+  investability,
+  onSelect,
+}: {
+  item: Recommendation;
+  variant: "holding" | "opportunity";
+  investability?: Investability;
+  onSelect: (symbol: string) => void;
+}) {
+  const { company, holding, compliance } = item;
+  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
+  const primaryTheme = company.themes[0] ? prettyTheme(company.themes[0]) : "";
+  const dek = primaryTheme ? `${primaryTheme} · ${item.conviction} conviction` : `${item.conviction} conviction`;
+  const todayPct = holding?.dayReturnPct ?? company.market?.dayChangePct;
+  const hasBadge = company.userAdded || compliance.status !== "unknown" || offLimits;
+  return (
+    <button
+      type="button"
+      className={`lt-row ${variant}${offLimits ? " off-limits" : ""}`}
+      onClick={() => onSelect(company.symbol)}
+      aria-label={`${company.name}, ${item.action}, score ${item.score} — open detail`}
+    >
+      <span className="lt-company">
+        <span className="lt-name">
+          {company.name} <span className="lt-ticker">{company.symbol}</span>
+          {hasBadge && (
+            <span className="lt-badges">
+              {company.userAdded && <WatchBadge />}
+              {compliance.status !== "unknown" && (
+                <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
+              )}
+              {offLimits && investability && <InvestabilityBadge investability={investability} />}
+            </span>
+          )}
+        </span>
+        <span className="lt-dek">{dek}</span>
+      </span>
+      <span>
+        <Action action={item.action} />
+      </span>
+      <span>
+        <span className="lt-score-num">{item.score}</span>
+        <span className="lt-microbar">
+          <span style={{ width: `${clampPct(item.score)}%`, background: VERDICT_BAR[item.action] }} />
+        </span>
+      </span>
+      {variant === "holding" ? (
+        <>
+          <span className={`lt-num lt-total ${toneClass(holding?.totalReturnPct)}`}>
+            {formatSignedPct(holding?.totalReturnPct)}
+          </span>
+          <span className={`lt-num lt-today ${toneClass(todayPct)}`}>{formatSignedPct(todayPct)}</span>
+          <span className="lt-num">
+            <span className="lt-weight-num">{holding ? `${holding.portfolioWeight.toFixed(1)}%` : "—"}</span>
+            <span className="lt-weight-track" aria-hidden="true">
+              <span className="lt-weight-fill" style={{ width: `${clampPct(holding?.portfolioWeight ?? 0)}%` }} />
+            </span>
+          </span>
+        </>
+      ) : (
+        <>
+          <span className={`lt-num lt-today ${toneClass(todayPct)}`}>{formatSignedPct(todayPct)}</span>
+          <span className="lt-num lt-region">{regionCode(company.region)}</span>
+        </>
+      )}
+      <span className="lt-chev" aria-hidden="true">
+        ›
+      </span>
+    </button>
+  );
+}
+
+// A single brief in the portfolio rail: an uppercase tone-coloured eyebrow, a
+// headline and a muted sentence. The whole brief is a button into the relevant
+// company detail.
+function RailBrief({
+  eyebrow,
   tone,
-  label,
-  value,
-  detail,
+  headline,
+  note,
   onClick,
 }: {
-  icon: typeof Radar;
-  tone: "warn" | "calm" | "idea" | "neutral";
-  label: string;
-  value: string;
-  detail: string;
+  eyebrow: string;
+  tone: "warn" | "calm" | "neutral";
+  headline: ReactNode;
+  note: string;
   onClick?: () => void;
 }) {
   return (
-    <button className={`insight ${tone}`} type="button" onClick={onClick}>
-      <span className="insight-label">
-        <Icon aria-hidden="true" size={15} />
-        {label}
-      </span>
-      <strong className="insight-value">{value}</strong>
-      <span className="insight-detail">{detail}</span>
+    <button type="button" className="rail-brief" onClick={onClick}>
+      <div className={`rail-brief-eyebrow ${tone}`}>{eyebrow}</div>
+      <div className="rail-brief-headline">{headline}</div>
+      <div className="rail-brief-note">{note}</div>
     </button>
   );
 }
@@ -516,6 +765,9 @@ function InvestabilityBadge({ investability }: { investability: Investability })
 // consume, and the gap to the right is budget left stranded by whole-share rounding.
 // An over-budget name overflows the track (one share already exceeds the slot).
 // Sizing is approximate (measured price, approximate FX); it never touches the score.
+// Built from <span>s (phrasing content) so the meter stays valid markup even as a
+// descendant of the clickable standout button; the meter is aria-hidden with the
+// numbers carried in text.
 function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "detail" }) {
   const over = plan.status === "over";
   const fillPct = Math.min(100, Math.round(plan.budgetUse * 100));
@@ -523,8 +775,6 @@ function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "det
   const slotLabel = over
     ? `${plan.slotMultiple >= 10 ? "10+" : plan.slotMultiple.toFixed(1)}× your DKK ${formatNumber(plan.budgetDkk)} slot`
     : `of your DKK ${formatNumber(plan.budgetDkk)} slot`;
-  // Built from <span>s (phrasing content) so the meter stays valid markup even as a
-  // descendant of the clickable standout <button>; layout comes from CSS display.
   return (
     <span className={`buy-plan ${variant}${over ? " over" : ""}`} role="group" aria-label="Buy plan for your per-trade slot">
       <span className="buy-plan-head">
@@ -543,37 +793,58 @@ function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "det
   );
 }
 
-// The one-line detail under the front-page "Investable now" card. Honest in both
-// directions: it leads with what's blocked when anything is, and otherwise names
-// the best idea you can act on right now.
-function investableDetail(summary: InvestabilitySummary, topPlan?: PositionPlan): string {
-  const parts: string[] = [];
-  if (summary.offPlatform > 0) parts.push(`${summary.offPlatform} off Saxo`);
-  if (summary.aboveBudget > 0) parts.push(`${summary.aboveBudget} over budget`);
-  if (parts.length === 0) {
-    if (!summary.topInvestable) return "No ideas to act on yet";
-    const name = summary.topInvestable.company.name;
-    if (topPlan && topPlan.status === "fits") {
-      const ofBook = bookPctLabel(topPlan.bookFraction);
-      return `${name} · ≈${formatNumber(topPlan.shares)} sh${ofBook ? ` · ~${ofBook} of book` : ""}`;
-    }
-    return `All in reach · best: ${name}`;
+// Build a measured DKK NAV series for the hero sparkline from the holdings that
+// carry fetched price history. Each leg's native-currency history is FX-scaled so
+// its latest point equals the holding's DKK market value (and earlier points track
+// the price ratio), so the summed series is a real DKK portfolio value over the
+// trailing year — its latest total matching the model's NAV. Returns undefined
+// when no holding has history (demo mode), so the hero can show an empty state.
+function buildPortfolioSeries(portfolio: Recommendation[]): number[] | undefined {
+  const legs = portfolio
+    .map((rec) => ({ holding: rec.holding, history: rec.company.market?.history }))
+    .filter((leg): leg is { holding: Holding; history: number[] } =>
+      Boolean(leg.holding) && Array.isArray(leg.history) && leg.history.length >= 2,
+    );
+  if (legs.length === 0) return undefined;
+  const length = Math.min(...legs.map((leg) => leg.history.length));
+  if (length < 2) return undefined;
+  const series = new Array<number>(length).fill(0);
+  for (const { holding, history } of legs) {
+    const tail = history.slice(history.length - length);
+    const lastPrice = tail[tail.length - 1];
+    const fx = lastPrice > 0 ? holding.marketValueDkk / lastPrice : 0;
+    for (let i = 0; i < length; i += 1) series[i] += tail[i] * fx;
   }
-  return `${summary.investable} to act on · ${parts.join(" · ")}`;
+  return series.map((value) => Math.round(value));
 }
 
-// The top opportunity by score may be one you can't act on (off your broker, or a
-// single share over budget). Surface that on the front page rather than headlining
-// an un-buyable name as if it were a clean recommendation.
-function topOpportunityDetail(
-  topOpportunity: Recommendation | undefined,
-  investabilityFor: (company: Company) => Investability,
-): string {
-  if (!topOpportunity) return "No standout idea right now";
-  const inv = investabilityFor(topOpportunity.company);
-  const gated = inv.status !== "ok" && inv.status !== "unknown";
-  const tail = gated ? inv.reason : "you don't own it";
-  return `${topOpportunity.action} · score ${topOpportunity.score} · ${tail}`;
+// "28 JUN 20:13" — the live-status stamp, matching the prototype's wordmark line.
+function formatLiveStamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.toUpperCase();
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = date.toLocaleString("en-GB", { month: "short" }).toUpperCase();
+  const time = date.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day} ${month} ${time}`;
+}
+
+// The two axis labels under the hero sparkline — the months bounding the trailing
+// year, e.g. ["JUL '25", "JUN '26"].
+function trailingMonthLabels(): [string, string] {
+  const fmt = (date: Date) =>
+    `${date.toLocaleString("en-GB", { month: "short" }).toUpperCase()} '${String(date.getFullYear()).slice(2)}`;
+  const now = new Date();
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - 11);
+  return [fmt(start), fmt(now)];
+}
+
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function shortName(name: string): string {
+  return name.split(/\s+/)[0];
 }
 
 // The detail-view investability heading, in the user's own terms.
@@ -675,93 +946,6 @@ function BrokerBar({
   );
 }
 
-function DecisionList({
-  title,
-  subtitle,
-  items,
-  onSelect,
-}: {
-  title: string;
-  subtitle: string;
-  items: Recommendation[];
-  onSelect: (symbol: string) => void;
-}) {
-  return (
-    <section className="panel" aria-label={title}>
-      <div className="panel-heading">
-        <div>
-          <h2>{title}</h2>
-          <span>{subtitle}</span>
-        </div>
-        <span className="count">{items.length}</span>
-      </div>
-      {items.length === 0 ? (
-        <p className="empty">Nothing to show yet.</p>
-      ) : (
-        <div className="decision-grid">
-          {items.map((item) => (
-            <DecisionCard key={item.company.symbol} item={item} onSelect={onSelect} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function DecisionCard({
-  item,
-  investability,
-  onSelect,
-}: {
-  item: Recommendation;
-  investability?: Investability;
-  onSelect: (symbol: string) => void;
-}) {
-  const { company, holding, compliance } = item;
-  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
-  return (
-    <button
-      className={`decision-card${offLimits ? " off-limits" : ""}`}
-      type="button"
-      onClick={() => onSelect(company.symbol)}
-    >
-      <ScoreRing score={item.score} action={item.action} />
-      <div className="dc-body">
-        <div className="dc-top">
-          <Action action={item.action} />
-          <span className="dc-conviction">
-            {item.conviction} · {item.measured ? "data-backed" : "editorial"}
-          </span>
-          {company.userAdded && <WatchBadge />}
-          {compliance.status !== "unknown" && (
-            <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
-          )}
-          {offLimits && <InvestabilityBadge investability={investability} />}
-        </div>
-        <strong className="dc-name">{company.name}</strong>
-        <p className="dc-why">{item.headline}</p>
-      </div>
-      <div className="dc-right">
-        {holding ? (
-          <>
-            <span className={`dc-return ${toneClass(holding.totalReturnPct)}`}>
-              {formatSignedPct(holding.totalReturnPct)}
-            </span>
-            <span className="dc-broker">{holding.portfolioWeight.toFixed(0)}% · from Saxo</span>
-          </>
-        ) : company.market ? (
-          <>
-            <span className={`dc-return ${toneClass(company.market.dayChangePct)}`}>
-              {formatSignedPct(company.market.dayChangePct)}
-            </span>
-            <span className="dc-broker">today</span>
-          </>
-        ) : null}
-      </div>
-    </button>
-  );
-}
-
 // The Opportunities overview: not a flat ranked list but a map of where your book
 // has no exposure yet. It leads with the single standout idea, then groups every
 // name you don't own by theme — each theme badged with YOUR own exposure to it, so
@@ -774,12 +958,13 @@ function OpportunitiesOverview({
   overview,
   summary,
   settings,
+  markets,
+  onChangeSettings,
   investabilityFor,
   bookValueDkk,
   hideOffLimits,
   onToggleOffLimits,
   watchlist,
-  markets,
   onAddWatch,
   onRemoveWatch,
   onSelect,
@@ -787,12 +972,13 @@ function OpportunitiesOverview({
   overview: OpportunityOverview;
   summary: InvestabilitySummary;
   settings: BrokerSettings;
+  markets: string[];
+  onChangeSettings: (next: BrokerSettings) => void;
   investabilityFor: (company: Company) => Investability;
   bookValueDkk: number;
   hideOffLimits: boolean;
   onToggleOffLimits: (next: boolean) => void;
   watchlist: WatchEntry[];
-  markets: string[];
   onAddWatch: (input: { name: string; symbol: string; exchange?: string }) => AddWatchError | undefined;
   onRemoveWatch: (symbol: string) => void;
   onSelect: (symbol: string) => void;
@@ -801,6 +987,7 @@ function OpportunitiesOverview({
   const gapThemeCount = groups.filter((g) => g.isGap).length;
   const offLimitsTotal = summary.offPlatform + summary.aboveBudget;
 
+  const brokerBar = <BrokerBar settings={settings} markets={markets} onChange={onChangeSettings} />;
   const watchBar = (
     <WatchlistBar watchlist={watchlist} markets={markets} onAdd={onAddWatch} onRemove={onRemoveWatch} />
   );
@@ -815,6 +1002,7 @@ function OpportunitiesOverview({
             <span>Names you don&apos;t own — and where your book has no exposure yet</span>
           </div>
         </div>
+        {brokerBar}
         {watchBar}
         {hiddenByFilter ? (
           <p className="empty">
@@ -836,11 +1024,17 @@ function OpportunitiesOverview({
       <div className="panel-heading">
         <div>
           <h2>Opportunities</h2>
-          <span>Names you don&apos;t own — and where your book has no exposure yet</span>
+          <span>Names you don&apos;t own</span>
         </div>
-        <span className="count">{total}</span>
+        <span className="count">{total} ideas</span>
       </div>
 
+      <p className="opp-intro">
+        Curated global AI &amp; tech names ranked by the model — the ideas your broker&apos;s screen will never put in
+        front of you.
+      </p>
+
+      {brokerBar}
       {watchBar}
 
       {standout && (
@@ -904,9 +1098,47 @@ function OpportunitiesOverview({
         )}
       </p>
 
-      <div className="opp-groups">
+      <div className="ledger-scroll">
+        <div className="lt-head opportunity" role="row">
+          <span>Company</span>
+          <span>Verdict</span>
+          <span>Score</span>
+          <span className="num">Today</span>
+          <span className="num">Region</span>
+          <span aria-hidden="true" />
+        </div>
+
         {groups.map((group) => (
-          <ThemeGroup key={group.theme} group={group} investabilityFor={investabilityFor} onSelect={onSelect} />
+          <div className={`opp-group ${group.isGap ? "is-gap" : ""}`} key={group.theme}>
+            <div
+              className="opp-theme-row"
+              role="img"
+              aria-label={
+                group.isGap
+                  ? `Your exposure to ${prettyTheme(group.theme)}: none — a gap in your book`
+                  : `Your exposure to ${prettyTheme(group.theme)}: ${group.ownedCount} ${group.ownedCount === 1 ? "holding" : "holdings"}, ${group.ownedWeightPct.toFixed(0)} percent of your book`
+              }
+            >
+              <span className="opp-theme">{prettyTheme(group.theme)}</span>
+              <span className="opp-exposure">
+                <span className="opp-exposure-label">{themeExposureLabel(group)}</span>
+                <span className="opp-meter" aria-hidden="true">
+                  {!group.isGap && (
+                    <span className="opp-meter-fill" style={{ width: `${clampPct(group.ownedWeightPct)}%` }} />
+                  )}
+                </span>
+              </span>
+            </div>
+            {group.opportunities.map((item) => (
+              <LedgerRow
+                key={item.company.symbol}
+                item={item}
+                variant="opportunity"
+                investability={investabilityFor(item.company)}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -917,6 +1149,13 @@ function OpportunitiesOverview({
       </p>
     </section>
   );
+}
+
+// The exposure label for an opportunity theme group: a gap reads as "you own
+// none", otherwise the holding count and weight of your book already in the theme.
+function themeExposureLabel(group: OpportunityGroup): string {
+  if (group.isGap) return "Gap · you own none";
+  return `${group.ownedCount} ${group.ownedCount === 1 ? "holding" : "holdings"} · ${group.ownedWeightPct.toFixed(0)}% of book`;
 }
 
 // Where you put YOUR own ideas through the same unbiased model. A typed name joins
@@ -1068,45 +1307,42 @@ function StandoutIdea({
 }) {
   const { company } = rec;
   const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
+  const todayPct = company.market?.dayChangePct;
   const plan = investability ? planPosition(investability, bookValueDkk) : undefined;
   return (
     <button
       type="button"
-      className={`opp-hero${offLimits ? " off-limits" : ""}`}
+      className={`standout${offLimits ? " off-limits" : ""}`}
       onClick={() => onSelect(company.symbol)}
       aria-label={`Standout idea: ${company.name}, score ${rec.score}, ${rec.action} — open detail`}
     >
-      <ScoreRing score={rec.score} action={rec.action} large />
-      <div className="opp-hero-body">
-        <span className="opp-hero-eyebrow">Standout idea · you don&apos;t own it</span>
-        <strong className="opp-hero-name">{company.name}</strong>
-        <div className="opp-hero-meta">
-          <Action action={rec.action} />
-          <span className="opp-hero-conv">
-            {rec.conviction} conviction · {rec.measured ? "data-backed" : "editorial"}
+      <div className="standout-eyebrow">↗ Top opportunity · you don&apos;t own it</div>
+      <div className="standout-top">
+        <span className="standout-name">{company.name}</span>
+        {todayPct !== undefined && (
+          <span className="standout-return">
+            <span className={toneClass(todayPct)}>{formatSignedPct(todayPct)}</span>
+            <span className="standout-return-unit">today</span>
           </span>
-          {company.userAdded && <WatchBadge />}
-          {rec.compliance.status !== "unknown" && (
-            <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
-          )}
-          {offLimits && <InvestabilityBadge investability={investability} />}
-        </div>
-        <p className="opp-hero-why">{rec.headline}</p>
-        <p className="opp-hero-fit">{standoutFit(exposure)}</p>
-        {plan ? (
-          <BuyPlan plan={plan} variant="hero" />
-        ) : (
-          investability &&
-          investability.status === "ok" && <p className="opp-hero-invest">✓ {investability.note}</p>
         )}
       </div>
-      {company.market?.dayChangePct !== undefined && (
-        <div className="opp-hero-right">
-          <span className={`dc-return ${toneClass(company.market.dayChangePct)}`}>
-            {formatSignedPct(company.market.dayChangePct)}
-          </span>
-          <span className="dc-broker">today</span>
-        </div>
+      <div className="standout-meta">
+        <Action action={rec.action} />
+        <span className="standout-conv">
+          {rec.conviction} conviction · {rec.measured ? "data-backed" : "editorial"}
+        </span>
+        {company.userAdded && <WatchBadge />}
+        {rec.compliance.status !== "unknown" && (
+          <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
+        )}
+        {offLimits && investability && <InvestabilityBadge investability={investability} />}
+      </div>
+      <p className="standout-why">{rec.headline}</p>
+      <p className="standout-fit">{standoutFit(exposure)}</p>
+      {plan ? (
+        <BuyPlan plan={plan} variant="hero" />
+      ) : (
+        investability && investability.status === "ok" && <p className="standout-invest">✓ {investability.note}</p>
       )}
     </button>
   );
@@ -1123,56 +1359,6 @@ function standoutFit(exposure: OpportunityOverview["standoutExposure"]): string 
   return `Adds to your ${prettyTheme(exposure.theme)} tilt — already ${holdings}, ${exposure.ownedWeightPct.toFixed(0)}% of your book.`;
 }
 
-// One theme section: a theme eyebrow plus the signature exposure meter encoding how
-// much of your book is already here, then the opportunity rows. A gap theme reads
-// visually empty (dashed, accent-labelled) so the absence is the point.
-function ThemeGroup({
-  group,
-  investabilityFor,
-  onSelect,
-}: {
-  group: OpportunityGroup;
-  investabilityFor: (company: Company) => Investability;
-  onSelect: (symbol: string) => void;
-}) {
-  const { theme, opportunities, ownedCount, ownedWeightPct, isGap } = group;
-  const fill = Math.max(0, Math.min(100, ownedWeightPct));
-  const exposureLabel = isGap
-    ? "Gap · you own none"
-    : `${ownedCount} ${ownedCount === 1 ? "holding" : "holdings"} · ${ownedWeightPct.toFixed(0)}% of book`;
-  return (
-    <section className={`opp-group ${isGap ? "is-gap" : ""}`} aria-label={`${prettyTheme(theme)} opportunities`}>
-      <header className="opp-group-head">
-        <span className="opp-theme">{prettyTheme(theme)}</span>
-        <div
-          className="opp-exposure"
-          role="img"
-          aria-label={
-            isGap
-              ? `Your exposure to ${prettyTheme(theme)}: none — a gap in your book`
-              : `Your exposure to ${prettyTheme(theme)}: ${ownedCount} ${ownedCount === 1 ? "holding" : "holdings"}, ${ownedWeightPct.toFixed(0)} percent of your book`
-          }
-        >
-          <span className="opp-exposure-label">{exposureLabel}</span>
-          <span className="opp-meter" aria-hidden="true">
-            {!isGap && <span className="opp-meter-fill" style={{ width: `${fill}%` }} />}
-          </span>
-        </div>
-      </header>
-      <div className="decision-grid">
-        {opportunities.map((item) => (
-          <DecisionCard
-            key={item.company.symbol}
-            item={item}
-            investability={investabilityFor(item.company)}
-            onSelect={onSelect}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // The decision map: every name on one risk/reward plane — your holdings (filled,
 // sized by weight) and the opportunities you don't own (hollow). The synthesis a
 // broker can't draw: it only ever shows what you already hold. Score (x) is the
@@ -1183,11 +1369,13 @@ function DecisionMap({
   portfolio,
   opportunities,
   opportunityLimit,
+  topOpportunitySymbol,
   onSelect,
 }: {
   portfolio: Recommendation[];
   opportunities: Recommendation[];
   opportunityLimit: number;
+  topOpportunitySymbol?: string;
   onSelect: (symbol: string) => void;
 }) {
   const shownOpportunities = opportunities.slice(0, opportunityLimit);
@@ -1230,9 +1418,9 @@ function DecisionMap({
       <div className="panel-heading">
         <div>
           <h2>Decision map</h2>
-          <span>Score against risk — your book and the field on one plane</span>
+          <span>Score × risk · one plane — your book and the field, the synthesis a broker can&apos;t draw</span>
         </div>
-        <span className="count">{points.length}</span>
+        <span className="count">{points.length} plotted</span>
       </div>
 
       <div className="map-frame">
@@ -1251,27 +1439,27 @@ function DecisionMap({
           <line className="map-mid" x1={left} y1={midY} x2={right} y2={midY} />
 
           {/* Quadrant labels in their corners (structure carries meaning) */}
-          <text className="map-quad-label" x={right - 8} y={bottom - 8} textAnchor="end">
+          <text className="map-quad-label steady" x={right - 8} y={bottom - 8} textAnchor="end">
             {QUADRANT_LABELS["strong-steady"]}
           </text>
-          <text className="map-quad-label" x={right - 8} y={top + 14} textAnchor="end">
+          <text className="map-quad-label faint" x={right - 8} y={top + 14} textAnchor="end">
             {QUADRANT_LABELS["strong-risky"]}
           </text>
-          <text className="map-quad-label" x={left + 8} y={bottom - 8}>
+          <text className="map-quad-label faint" x={left + 8} y={bottom - 8}>
             {QUADRANT_LABELS["low-priority"]}
           </text>
-          <text className="map-quad-label" x={left + 8} y={top + 14}>
+          <text className="map-quad-label avoid" x={left + 8} y={top + 14}>
             {QUADRANT_LABELS["avoid-zone"]}
           </text>
 
-          {/* Axis cues */}
-          <text className="map-axis" x={(left + right) / 2} y={dims.height - 10} textAnchor="middle">
+          {/* Axis cue */}
+          <text className="map-axis" x={(left + right) / 2} y={dims.height - 12} textAnchor="middle">
             Model score →
           </text>
-          <text className="map-axis-end" x={left} y={dims.height - 10} textAnchor="start">
+          <text className="map-axis-end" x={left} y={dims.height - 12} textAnchor="start">
             weaker
           </text>
-          <text className="map-axis-end" x={right} y={dims.height - 10} textAnchor="end">
+          <text className="map-axis-end" x={right} y={dims.height - 12} textAnchor="end">
             stronger
           </text>
           <text
@@ -1285,7 +1473,14 @@ function DecisionMap({
           </text>
 
           {ordered.map((point) => (
-            <MapMarker key={point.symbol} point={point} dims={dims} scale={scale} onSelect={onSelect} />
+            <MapMarker
+              key={point.symbol}
+              point={point}
+              dims={dims}
+              scale={scale}
+              isTopOpp={!point.owned && point.symbol === topOpportunitySymbol}
+              onSelect={onSelect}
+            />
           ))}
         </svg>
       </div>
@@ -1295,20 +1490,21 @@ function DecisionMap({
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle className="map-swatch fill" cx="8" cy="8" r="6" />
           </svg>
-          Holdings — sized by weight
+          Your holdings
         </span>
         <span className="map-key">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle className="map-swatch hollow" cx="8" cy="8" r="5.5" />
           </svg>
-          Opportunities you don&apos;t own
+          Opportunities
         </span>
-        <span className="map-key map-key-actions" aria-hidden="true">
-          <i className="map-chip go" /> increase
-          <i className="map-chip hold" /> hold
-          <i className="map-chip trim" /> trim
-          <i className="map-chip avoid" /> avoid
+        <span className="map-key">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle className="map-swatch flag" cx="8" cy="8" r="5.5" />
+          </svg>
+          EIFO flag
         </span>
+        <span className="map-note">Click any marker for the breakdown.</span>
       </div>
 
       <p className="estimate-note">
@@ -1325,11 +1521,13 @@ function MapMarker({
   point,
   dims,
   scale,
+  isTopOpp,
   onSelect,
 }: {
   point: MapPoint;
   dims: PlaneDims;
   scale: { minR: number; maxR: number; maxWeight: number };
+  isTopOpp: boolean;
   onSelect: (symbol: string) => void;
 }) {
   const { x, y } = projectPoint(point.score, point.risk, dims);
@@ -1338,9 +1536,12 @@ function MapMarker({
   const label = `${point.name}: ${point.action}, score ${point.score}, risk ${point.risk}, ${
     point.owned ? `${point.weightPct.toFixed(1)}% of your book` : "not owned"
   }${flagged ? `, EIFO ${point.compliance.replace("_", " ")}` : ""}`;
+  const labelClass = point.owned ? "map-mark-label" : isTopOpp ? "map-mark-label top-opp" : "map-mark-label opp";
   return (
     <g
-      className={`map-dot ${mapTone(point.action)} ${point.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}`}
+      className={`map-dot ${mapTone(point.action)} ${point.owned ? "owned" : "opp"}${flagged ? " flagged" : ""}${
+        isTopOpp ? " top-opp" : ""
+      }`}
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -1355,11 +1556,9 @@ function MapMarker({
       <title>{label}</title>
       {flagged && <circle className="map-flag-ring" cx={x} cy={y} r={r + 3.5} />}
       <circle className={point.owned ? "map-mark fill" : "map-mark hollow"} cx={x} cy={y} r={r} />
-      {point.owned && (
-        <text className="map-mark-label" x={x + r + 3} y={y + 3.5}>
-          {point.symbol}
-        </text>
-      )}
+      <text className={labelClass} x={x} y={y + r + 12} textAnchor="middle">
+        {isTopOpp ? `${point.symbol} ${point.score}` : point.symbol}
+      </text>
     </g>
   );
 }
@@ -1590,6 +1789,7 @@ function CompanyDetail({
   peers,
   investability,
   bookValueDkk,
+  onBack,
   onSelect,
 }: {
   recommendation: Recommendation;
@@ -1597,6 +1797,7 @@ function CompanyDetail({
   peers?: PeerComparison;
   investability?: Investability;
   bookValueDkk: number;
+  onBack: () => void;
   onSelect: (symbol: string) => void;
 }) {
   const { company, compliance, holding } = recommendation;
@@ -1605,26 +1806,35 @@ function CompanyDetail({
 
   return (
     <section className="detail">
+      <button type="button" className="detail-back" onClick={onBack}>
+        ‹ Back to holdings
+      </button>
+
       <div className="detail-hero">
         <div>
-          <span className="symbol">{company.symbol} · {company.region}</span>
+          <span className="detail-symbol">
+            {company.symbol} · {company.region}
+          </span>
           <h2>{company.name}</h2>
-          <p>{company.themes.map(prettyTheme).join(" · ")}</p>
+          <p className="detail-hero-theme">{company.themes.map(prettyTheme).join(" · ")}</p>
         </div>
         <div className="detail-action">
-          <ScoreRing score={recommendation.score} action={recommendation.action} large />
+          <div className="detail-score">
+            <span className={`detail-score-num ${recommendation.action}`}>{recommendation.score}</span>
+            <span className="detail-score-max">/100</span>
+          </div>
           <Action action={recommendation.action} />
-          <span>
+          <div className="detail-conv">
             {recommendation.conviction} conviction · {recommendation.measured ? "data-backed" : "editorial only"}
-          </span>
+          </div>
         </div>
       </div>
 
-      <p className={`headline ${recommendation.action}`}>{recommendation.headline}</p>
+      <p className="headline">{recommendation.headline}</p>
 
       <div className="analysis">
         <article className="card">
-          <h3>Why this score</h3>
+          <h3>Why this score · input levels 0–100</h3>
           {compliance.status === "blocked" ? (
             <p className="micro-cap">Score forced to 0 by EIFO policy — the model weighting below is not applied.</p>
           ) : (
@@ -1645,7 +1855,10 @@ function CompanyDetail({
           {recommendation.reasoning.map((line, index) => (
             <p key={index}>{line}</p>
           ))}
-          <p className="downside">{recommendation.downside}</p>
+          <p className="downside">
+            <span className="downside-label">Downside · </span>
+            {recommendation.downside}
+          </p>
         </article>
       </div>
 
