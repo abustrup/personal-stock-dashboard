@@ -1184,6 +1184,79 @@ body > #root {
   color: var(--muted-2);
 }
 
+/* ---------- lead-card trajectory strip ---------- */
+/* The trailing-year measured price path on the two lead idea cards (front-page
+   next buy + Opportunities standout): a quiet horizon line set off by a hairline,
+   captioned with the 12-month move and 52-week-range read. Restrained on purpose —
+   the line carries the trajectory, the verdict and score above it carry the call. */
+.lead-trend {
+  display: block;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--row-line);
+}
+
+.lead-trend-svg {
+  display: block;
+  width: 100%;
+  height: 30px;
+}
+
+.lead-trend-area.up {
+  fill: var(--up-tint);
+}
+.lead-trend-area.down {
+  fill: var(--down-tint);
+}
+
+.lead-trend-line {
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.lead-trend-line.up {
+  stroke: var(--up-bar);
+}
+.lead-trend-line.down {
+  stroke: var(--down-bar);
+}
+
+.lead-trend-dot.up {
+  fill: var(--up-bar);
+}
+.lead-trend-dot.down {
+  fill: var(--down-bar);
+}
+
+.lead-trend-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.lead-trend-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lead-trend-move {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lead-trend-range {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+
 /* off-limits names recede until hovered */
 .standout.off-limits,
 .rail-top.off-limits,

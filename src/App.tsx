@@ -41,7 +41,7 @@ import {
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
-import { buildPriceChart, monthsAgoIndex, type ChartDims } from "./lib/sparkline";
+import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
@@ -900,6 +900,7 @@ function RailNextBuy({ nextBuy, onSelect }: { nextBuy: NextBuy; onSelect: (symbo
       )}
       <div className="rail-top-why">{rec.headline}</div>
       <div className="rail-top-fit">{standoutFit(exposure)}</div>
+      <LeadTrend market={company.market} />
       {offLimits ? (
         <div className="rail-top-gate">
           <InvestabilityBadge investability={investability} />
@@ -982,6 +983,70 @@ function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "det
       </span>
     </span>
   );
+}
+
+// The trajectory strip for a lead idea card (the front-page next buy and the
+// Opportunities standout). It draws the measured trailing-year price path as a
+// quiet horizon line and captions it with the 12-month move and where the latest
+// price sits in its 52-week range — so the card carries the price trajectory next
+// to the model's score and verdict, the synthesis a broker's price chart never
+// draws beside it. The 12-month move comes from the same cleaned series the line
+// is drawn from (lib/sparkline), so the figure and the line can't disagree; the
+// chart's vertical domain is widened to the canonical 52-week high/low (the same
+// refs PricePath uses), so the latest-price dot sits where the "52w range" caption
+// says it should. Drawn only when a refresh has fetched history; renders nothing
+// until then (no fake line).
+const LEAD_SPARK_DIMS: ChartDims = { width: 300, height: 38, padX: 2, padTop: 5, padBottom: 5 };
+
+function LeadTrend({ market }: { market?: MarketSnapshot }) {
+  const history = market?.history;
+  if (!history) return null;
+  const chart = buildPriceChart(history, LEAD_SPARK_DIMS, {
+    high: market!.fiftyTwoWeekHigh,
+    low: market!.fiftyTwoWeekLow,
+  });
+  const trend = summarizeTrend(history);
+  if (!chart || !trend) return null;
+
+  const rising = trend.rising;
+  // Prefer the canonical 52-week range position from market.ts; fall back to the
+  // drawn series' own band when a snapshot lacks the 52-week high/low.
+  const rangePhrase = rangeLabel(market!.rangePosition ?? trend.rangePosition);
+  const label = `Price over the trailing year: ${formatSignedPct(trend.changePct)}${
+    rangePhrase ? `, ${rangePhrase}` : ""
+  }. Latest ${formatPrice(market!.price)} ${market!.currency}.`;
+
+  return (
+    <span className="lead-trend" role="img" aria-label={label}>
+      <svg
+        className="lead-trend-svg"
+        viewBox={`0 0 ${LEAD_SPARK_DIMS.width} ${LEAD_SPARK_DIMS.height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path className={`lead-trend-area ${rising ? "up" : "down"}`} d={chart.areaPath} />
+        <path className={`lead-trend-line ${rising ? "up" : "down"}`} d={chart.linePath} />
+        <circle className={`lead-trend-dot ${rising ? "up" : "down"}`} cx={chart.last.x} cy={chart.last.y} r={3} />
+      </svg>
+      <span className="lead-trend-cap">
+        <span className="lead-trend-eyebrow">12-mo</span>
+        <span className={`lead-trend-move ${toneClass(trend.changePct)}`}>{formatSignedPct(trend.changePct)}</span>
+        {rangePhrase && <span className="lead-trend-range">{rangePhrase}</span>}
+      </span>
+    </span>
+  );
+}
+
+// Where the latest price sits in its 52-week range, in plain words. Undefined
+// when there's no position to read, so the caption simply omits it rather than
+// guessing.
+function rangeLabel(position: number | undefined): string | undefined {
+  if (position === undefined) return undefined;
+  if (position >= 0.85) return "near 52w high";
+  if (position <= 0.15) return "near 52w low";
+  if (position >= 0.6) return "upper 52w range";
+  if (position <= 0.4) return "lower 52w range";
+  return "mid 52w range";
 }
 
 // Build a measured DKK NAV series for the hero sparkline from the holdings that
@@ -1530,6 +1595,7 @@ function StandoutIdea({
       </div>
       <p className="standout-why">{rec.headline}</p>
       <p className="standout-fit">{standoutFit(exposure)}</p>
+      <LeadTrend market={company.market} />
       {plan ? (
         <BuyPlan plan={plan} variant="hero" />
       ) : (
