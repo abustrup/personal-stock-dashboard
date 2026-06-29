@@ -62,24 +62,57 @@ const compliancePenaltyByStatus: Record<ComplianceStatus, number> = {
   unknown: 4,
 };
 
-function calculateScore(company: Company, complianceStatus: ComplianceStatus): number {
-  const newsScore = company.newsSignal.sentiment;
-  const expertScore = directionScore(company.expertSignal.direction);
-  const compliancePenalty = compliancePenaltyByStatus[complianceStatus];
+/** The constant base every score starts from before factor contributions. */
+const SCORE_BASE = 26;
 
-  return clamp(
-    company.aiExposure * 0.2 +
-      company.growth * 0.16 +
-      company.momentum * 0.14 +
-      company.quality * 0.12 +
-      newsScore * 0.1 +
-      expertScore * 0.08 -
-      company.valuationRisk * 0.1 -
-      company.balanceSheetRisk * 0.05 -
-      company.geopoliticalRisk * 0.05 -
-      compliancePenalty +
-      26,
-  );
+/** How each factor's weighted pull on the score was sourced. */
+export type ContributionProvenance = "measured" | "editorial" | "policy";
+
+/** One factor's signed, weighted contribution to the 0-100 score. */
+export type ScoreContribution = {
+  label: string;
+  /** Signed weighted points pushed onto the score (before the base + clamp). */
+  points: number;
+  provenance: ContributionProvenance;
+};
+
+/**
+ * The per-factor weighted contributions behind a company's score. This is the
+ * single source of truth for the scoring weights: `calculateScore` sums these
+ * (plus the base, then clamps), and the UI explains the score from the same
+ * numbers — so the explanation can never drift from the math. Provenance follows
+ * the same measured/editorial discipline as the rest of the dashboard: momentum
+ * is measured once a price snapshot exists; growth/quality/valuation/balance-sheet
+ * are measured only when fundamentals were fetched; AI exposure and geopolitical
+ * risk are always editorial; compliance is policy-driven; a news/expert signal is
+ * measured only when its own feed is live.
+ */
+export function scoreContributions(
+  company: Company,
+  complianceStatus: ComplianceStatus,
+): ScoreContribution[] {
+  const fundamentals: ContributionProvenance = company.market?.fundamentals ? "measured" : "editorial";
+  const momentum: ContributionProvenance = company.market ? "measured" : "editorial";
+  const news: ContributionProvenance = company.newsSignal.freshness === "live" ? "measured" : "editorial";
+  const expert: ContributionProvenance = company.expertSignal.freshness === "live" ? "measured" : "editorial";
+
+  return [
+    { label: "AI exposure", points: company.aiExposure * 0.2, provenance: "editorial" },
+    { label: "Growth", points: company.growth * 0.16, provenance: fundamentals },
+    { label: "Momentum", points: company.momentum * 0.14, provenance: momentum },
+    { label: "Quality", points: company.quality * 0.12, provenance: fundamentals },
+    { label: "News signal", points: company.newsSignal.sentiment * 0.1, provenance: news },
+    { label: "Expert view", points: directionScore(company.expertSignal.direction) * 0.08, provenance: expert },
+    { label: "Valuation risk", points: -company.valuationRisk * 0.1, provenance: fundamentals },
+    { label: "Balance-sheet risk", points: -company.balanceSheetRisk * 0.05, provenance: fundamentals },
+    { label: "Geopolitical risk", points: -company.geopoliticalRisk * 0.05, provenance: "editorial" },
+    { label: "Compliance", points: -compliancePenaltyByStatus[complianceStatus], provenance: "policy" },
+  ];
+}
+
+function calculateScore(company: Company, complianceStatus: ComplianceStatus): number {
+  const total = scoreContributions(company, complianceStatus).reduce((sum, c) => sum + c.points, 0);
+  return clamp(total + SCORE_BASE);
 }
 
 function actionForScore(score: number, owned: boolean): RecommendationAction {

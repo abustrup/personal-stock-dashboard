@@ -18,9 +18,10 @@ import { buildDashboardModel } from "./lib/dashboard";
 import { buildInsights, RISK_FACTORS, type HoldingContext, type RiskFactor } from "./lib/insights";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
 import { parsePortfolioCsv } from "./lib/portfolio";
+import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
-import type { Company, Holding, MarketSnapshot, Recommendation } from "./lib/types";
+import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "detail";
 
@@ -388,6 +389,15 @@ function CompanyDetail({
       <div className="analysis">
         <article className="card">
           <h3>Why this score</h3>
+          {compliance.status === "blocked" ? (
+            <p className="micro-cap">Score forced to 0 by EIFO policy — the model weighting below is not applied.</p>
+          ) : (
+            <>
+              <p className="micro-cap">Weighted pull on the score</p>
+              <ScoreDrivers company={company} complianceStatus={compliance.status} />
+            </>
+          )}
+          <p className="micro-cap micro-cap-spaced">Input levels (0–100)</p>
           <DriverBars company={company} />
           <p className="estimate-note">
             Momentum, growth, quality, valuation and balance-sheet risk are measured from live data when available;
@@ -469,6 +479,45 @@ function CompanyDetail({
         </div>
       )}
     </section>
+  );
+}
+
+// Explains the model's central score by the signed, weighted pull of each input
+// — the synthesis a broker cannot give (a broker has no model score at all).
+// Direction is encoded by colour (green lifts, warm-red drags); provenance keeps
+// the measured/editorial/policy discipline as a label, never relabelling one as
+// the other. Bars are scaled to the largest absolute contribution, so the chart
+// shows relative influence, not a literal decomposition of the rounded score.
+function ScoreDrivers({ company, complianceStatus }: { company: Company; complianceStatus: ComplianceStatus }) {
+  const contributions = scoreContributions(company, complianceStatus)
+    .filter((c) => Math.abs(c.points) >= 0.05)
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
+  const max = contributions.reduce((m, c) => Math.max(m, Math.abs(c.points)), 1);
+  return (
+    <div className="contribs">
+      {contributions.map((c) => {
+        const positive = c.points > 0;
+        const width = (Math.abs(c.points) / max) * 50;
+        return (
+          <div className="contrib" key={c.label}>
+            <span className="contrib-label">
+              {c.label} <em>{c.provenance}</em>
+            </span>
+            <div className="contrib-track">
+              <span className="contrib-mid" aria-hidden="true" />
+              <span
+                className={`contrib-fill ${positive ? "pos" : "neg"}`}
+                style={positive ? { left: "50%", width: `${width}%` } : { right: "50%", width: `${width}%` }}
+              />
+            </div>
+            <span className={`contrib-val ${positive ? "tone-up" : "tone-down"}`}>
+              {positive ? "+" : "−"}
+              {Math.abs(c.points).toFixed(1)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
