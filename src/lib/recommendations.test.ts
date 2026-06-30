@@ -157,4 +157,19 @@ describe("provenanceLabel", () => {
   it("calls an editorial-only name (no market snapshot) 'editorial only'", () => {
     expect(provenanceLabel(recommendCompany(baseCompany))).toBe("editorial only");
   });
+
+  it("under-claims a live-signal-but-unpriced name as 'editorial only', never overstating price it lacks", () => {
+    // News/expert feeds merge independently of the price snapshot, so a name can be
+    // `measured` (a live news feed) yet have no market. The header deliberately
+    // under-claims here — "editorial only" — rather than implying a price or
+    // fundamentals it doesn't have. Undercounting provenance is the safe error.
+    const liveNewsNoPrice: Company = {
+      ...baseCompany,
+      newsSignal: { ...baseCompany.newsSignal, freshness: "live" },
+    };
+    const rec = recommendCompany(liveNewsNoPrice);
+    expect(rec.measured).toBe(true);
+    expect(rec.company.market).toBeUndefined();
+    expect(provenanceLabel(rec)).toBe("editorial only");
+  });
 });
