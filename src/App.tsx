@@ -1,9 +1,12 @@
 import {
   AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   Ban,
   BookmarkPlus,
   FileUp,
   GitCompareArrows,
+  History,
   Landmark,
   Plus,
   RotateCcw,
@@ -12,7 +15,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
@@ -44,7 +47,14 @@ import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from 
 import { rangeLabel, readRange } from "./lib/range";
 import { OWNED_SCORE_THRESHOLDS, scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
-import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
+import {
+  clearPortfolio,
+  loadChangeBaseline,
+  loadPortfolio,
+  saveChangeBaseline,
+  savePortfolio,
+} from "./lib/storage";
+import { diffModel, snapshotModel, type Change, type ChangeDigest } from "./lib/changes";
 import {
   assessInvestability,
   investableSymbols,
@@ -355,6 +365,30 @@ export default function App() {
   // (no fetched history), in which case the inset shows a graceful empty state.
   const navSeries = useMemo(() => buildPortfolioSeries(model.portfolio), [model.portfolio]);
 
+  // "Since the last refresh" — the one axis no other view covers: TIME. We hold a
+  // baseline of the model's own outputs from the data the reader last saw, and
+  // diff this refresh against it. The baseline is captured ONCE at mount (a ref),
+  // so the digest stays stable for the session even as we record the new one.
+  // Lazy init (like loadBrokerSettings/loadWatchlist above): read the last-seen
+  // baseline from storage exactly once at mount, never on later renders.
+  const [priorBaseline] = useState(loadChangeBaseline);
+  const savedAsOfRef = useRef<string | undefined>(priorBaseline?.asOf);
+  const changeDigest = useMemo<ChangeDigest>(
+    // Only meaningful against live data; before the fetch lands, model.all carries
+    // editorial momentum, which would diff falsely against a measured baseline.
+    () => (hasLiveMarket ? diffModel(priorBaseline, model.all) : { hasBaseline: false, changes: [] }),
+    [hasLiveMarket, priorBaseline, model.all],
+  );
+  // Record the model the reader is seeing as the next baseline — but only once the
+  // data has actually advanced (a new asOf), so re-opening the app before the next
+  // refresh keeps showing the same digest instead of wiping it to "nothing moved".
+  useEffect(() => {
+    if (!hasLiveMarket || !dataAsOf) return;
+    if (savedAsOfRef.current === dataAsOf) return;
+    saveChangeBaseline(snapshotModel(model.all, dataAsOf));
+    savedAsOfRef.current = dataAsOf;
+  }, [hasLiveMarket, dataAsOf, model.all]);
+
   const tabCounts: Partial<Record<View, number>> = {
     portfolio: model.portfolio.length,
     opportunities: model.opportunities.length,
@@ -434,6 +468,7 @@ export default function App() {
             insights={insights}
             nextBuy={nextBuy}
             perTradeBudgetDkk={brokerSettings.perTradeBudgetDkk}
+            changeDigest={changeDigest}
             onSelect={open}
           />
         )}
@@ -592,17 +627,94 @@ function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number })
 // rail on the right. Both read entirely from the dashboard model and buildInsights
 // — the rail surfaces the top opportunity, what needs attention, concentration and
 // EIFO posture, the synthesis a broker's holdings screen never draws.
+// "Since the last refresh" — the front page's one temporal read. Every other
+// view answers "where do things stand now"; this answers "what does the model
+// read DIFFERENTLY than the last data you saw" — a synthesis a static broker
+// feed structurally can't give. It stays out of the way: nothing renders before
+// the first baseline exists, and a quiet one-line "caught up" on a flat day, so
+// it only takes real estate when something genuinely moved. The honesty rule is
+// visible in the dots — a filled dot is a MEASURED market delta (price,
+// momentum); a hollow dot is the MODEL's verdict call, never relabeled measured.
+function describeChange(change: Change): string {
+  switch (change.kind) {
+    case "verdict":
+      return `${VERDICT_WORD[change.fromAction!]} → ${VERDICT_WORD[change.toAction!]}`;
+    case "momentum":
+      return `Momentum ${Math.round(change.fromMomentum!)} → ${Math.round(change.toMomentum!)}`;
+    case "price": {
+      const pct = change.pricePct ?? 0;
+      return `${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}% price`;
+    }
+  }
+}
+
+function RefreshDigest({
+  digest,
+  onSelect,
+}: {
+  digest: ChangeDigest;
+  onSelect: (symbol: string) => void;
+}) {
+  // First-ever look (no baseline yet): record silently, show nothing — a
+  // first-time visitor's front page stays clean, and the value appears next time.
+  if (!digest.hasBaseline) return null;
+  const since = digest.baselineAsOf ? formatLiveStamp(digest.baselineAsOf) : undefined;
+  return (
+    <section className="refresh-digest" aria-label="What changed since the last refresh">
+      <div className="rd-head">
+        <span className="rd-eyebrow">
+          <History aria-hidden="true" size={13} />
+          Since the last refresh{since ? ` · ${since}` : ""}
+        </span>
+        {digest.changes.length > 0 && (
+          <span className="rd-legend" aria-hidden="true">
+            <span className="rd-dot measured" /> measured
+            <span className="rd-dot model" /> model
+          </span>
+        )}
+      </div>
+      {digest.changes.length === 0 ? (
+        <p className="rd-quiet">No material moves since you last looked — the model reads the field the same.</p>
+      ) : (
+        <ul className="rd-chips">
+          {digest.changes.map((change) => {
+            const Arrow = change.direction === "up" ? ArrowUpRight : ArrowDownRight;
+            return (
+              <li key={`${change.symbol}-${change.kind}`}>
+                <button
+                  type="button"
+                  className={`rd-chip ${change.direction}`}
+                  onClick={() => onSelect(change.symbol)}
+                  title={`${change.name} — ${change.measured ? "measured market move" : "the model's verdict changed"}. Open detail.`}
+                >
+                  <span className={`rd-dot ${change.measured ? "measured" : "model"}`} aria-hidden="true" />
+                  <span className="rd-name">{shortName(change.name)}</span>
+                  <span className="rd-tag">{change.owned ? "BOOK" : "IDEA"}</span>
+                  <Arrow className="rd-arrow" aria-hidden="true" size={13} />
+                  <span className="rd-delta">{describeChange(change)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function PortfolioView({
   portfolio,
   insights,
   nextBuy,
   perTradeBudgetDkk,
+  changeDigest,
   onSelect,
 }: {
   portfolio: Recommendation[];
   insights: ReturnType<typeof buildInsights>;
   nextBuy?: NextBuy;
   perTradeBudgetDkk: number;
+  changeDigest: ChangeDigest;
   onSelect: (symbol: string) => void;
 }) {
   const { needsAttention, concentration, compliance, tilt } = insights;
@@ -619,6 +731,8 @@ function PortfolioView({
   );
   return (
     <div className="portfolio-grid">
+      <RefreshDigest digest={changeDigest} onSelect={onSelect} />
+
       {scorecard && <BookScorecard card={scorecard} onSelect={onSelect} />}
 
       <section className="holdings" aria-label="Your holdings">

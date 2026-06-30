@@ -1,6 +1,8 @@
+import type { ModelSnapshot } from "./changes";
 import type { Holding } from "./types";
 
 const KEY = "psd.portfolio.v1";
+const CHANGES_KEY = "psd.changes.baseline.v1";
 
 export type StoredPortfolio = {
   version: 1;
@@ -60,5 +62,39 @@ export function clearPortfolio(): void {
     storage()?.removeItem(KEY);
   } catch {
     /* non-fatal */
+  }
+}
+
+// The "since the last refresh" baseline: the model snapshot the reader last saw,
+// so the next visit can diff against it. Stored separately from the portfolio so
+// either can be cleared without disturbing the other. Pure (de)serialization so
+// the shape check is unit-testable without a browser.
+export function serializeSnapshot(snapshot: ModelSnapshot): string {
+  return JSON.stringify({ version: 1, ...snapshot });
+}
+
+export function parseStoredSnapshot(raw: string | null | undefined): ModelSnapshot | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ModelSnapshot> & { version?: number };
+    if (parsed?.version !== 1) return undefined;
+    if (typeof parsed.asOf !== "string" || typeof parsed.entries !== "object" || parsed.entries === null) {
+      return undefined;
+    }
+    return { asOf: parsed.asOf, entries: parsed.entries as ModelSnapshot["entries"] };
+  } catch {
+    return undefined;
+  }
+}
+
+export function loadChangeBaseline(): ModelSnapshot | undefined {
+  return parseStoredSnapshot(storage()?.getItem(CHANGES_KEY) ?? undefined);
+}
+
+export function saveChangeBaseline(snapshot: ModelSnapshot): void {
+  try {
+    storage()?.setItem(CHANGES_KEY, serializeSnapshot(snapshot));
+  } catch {
+    /* quota / private mode — non-fatal, the digest just won't persist */
   }
 }
