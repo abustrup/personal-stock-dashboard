@@ -54,6 +54,7 @@ import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
+import { describeMarketFreshness } from "./lib/freshness";
 import { rangeLabel, readRange } from "./lib/range";
 import { OWNED_SCORE_THRESHOLDS, provenanceLabel, scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
@@ -229,6 +230,10 @@ export default function App() {
     [externalSignals, marketSnapshots],
   );
   const hasLiveMarket = Object.keys(marketSnapshots).length > 0;
+  // Classify the snapshot's age so the header chip only claims "LIVE" while the data
+  // is recent — a stale local copy is named as such, never dressed up as live.
+  const freshness = hasLiveMarket ? describeMarketFreshness(dataAsOf, new Date()) : undefined;
+  const isStale = freshness?.state === "stale";
   // User-added names run through the SAME enrichment path as the curated universe:
   // a refresh that wrote their symbol replaces the neutral placeholders with
   // measured momentum and fundamentals, so they're scored on real data when present.
@@ -469,11 +474,22 @@ export default function App() {
           <h1 className="wordmark">The Portfolio Ledger</h1>
         </div>
         <div className="topbar-actions">
-          <span className={`live${hasLiveMarket ? "" : " stale"}`} aria-label="data freshness">
+          <span
+            className={`live${hasLiveMarket && !isStale ? "" : " stale"}`}
+            aria-label={
+              !hasLiveMarket
+                ? "data source: editorial estimates, no live market data"
+                : isStale
+                  ? `market data is stale, ${freshness?.ageLabel.toLowerCase()}`
+                  : "market data is live"
+            }
+          >
             <span className="live-dot" aria-hidden="true" />
-            {hasLiveMarket
-              ? `LIVE · YHOO${dataAsOf ? ` · ${formatLiveStamp(dataAsOf)}` : ""}`
-              : "EDITORIAL · NPM RUN REFRESH"}
+            {!hasLiveMarket
+              ? "EDITORIAL · NPM RUN REFRESH"
+              : isStale
+                ? `YHOO${dataAsOf ? ` · ${formatLiveStamp(dataAsOf)}` : ""} · ${freshness?.ageLabel}`
+                : `LIVE · YHOO${dataAsOf ? ` · ${formatLiveStamp(dataAsOf)}` : ""}`}
           </span>
           {!source.isDemo && (
             <button className="ghost" type="button" onClick={resetToDemo} title="Forget the saved portfolio">

@@ -254,7 +254,7 @@ describe("App", () => {
 
   it("flags an above-budget name when live prices load and lets the user raise the budget", async () => {
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         // ASML near 1,800 USD ≈ 12,000+ DKK a share — over the default 5,000 DKK budget.
@@ -279,7 +279,7 @@ describe("App", () => {
 
   it("turns an affordable idea into a concrete buy plan sized to the slot", async () => {
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         // AMD is an opportunity (not held) on NASDAQ; ~200 USD ≈ 1,380 DKK a share,
@@ -309,7 +309,7 @@ describe("App", () => {
 
   it("lists a sized deploy queue of the next moves you can act on", async () => {
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         // Two non-owned, affordable names (≈1,380 / 1,242 DKK a share). At least one
@@ -450,7 +450,7 @@ describe("App", () => {
     // (which needs the price) never appears. A strong momentum keeps TSMC the lead
     // idea across the refresh, so the same name is assessed before and after.
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         TSM: {
@@ -501,7 +501,7 @@ describe("App", () => {
       asOf: "2026-06-28T18:49:41.386Z",
     });
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         NVDA: entry("NVDA"),
@@ -601,7 +601,7 @@ describe("App", () => {
 
   it("flags live data when a refresh snapshot is present", async () => {
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         NVDA: {
@@ -625,9 +625,31 @@ describe("App", () => {
     expect(await screen.findByText(/LIVE · YHOO/i)).toBeInTheDocument();
   });
 
+  it("stops claiming LIVE and names the age when the snapshot is stale", async () => {
+    const snapshot = {
+      // Refreshed three days ago: real Yahoo prices, but no longer current.
+      generatedAt: new Date(new Date().getTime() - 3 * 86_400_000).toISOString(),
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: { symbol: "NVDA", price: 197.22, currency: "USD", momentum: 61, asOf: "2026-06-27T16:00:00.000Z" },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+
+    // Age is named, the green "LIVE" claim is dropped, and it is NOT mislabelled
+    // editorial — the prices are still measured Yahoo data, just stale.
+    const chip = await screen.findByText(/3 DAYS OLD/i);
+    expect(chip).toHaveTextContent(/YHOO/i);
+    expect(chip).not.toHaveTextContent(/LIVE/i);
+    expect(chip).not.toHaveTextContent(/EDITORIAL/i);
+    expect(chip.className).toContain("stale");
+  });
+
   it("draws the annotated price-path chart when history is present", async () => {
     const snapshot = {
-      generatedAt: "2026-06-28T18:49:41.386Z",
+      generatedAt: new Date().toISOString(), // fresh: the chip reads LIVE only while recent
       sources: ["Yahoo Finance (keyless prices)"],
       market: {
         NVDA: {
