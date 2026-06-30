@@ -12,9 +12,47 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 - **Result** — shipped (PR#) / declined (+ reason).
 
 ## Standing "don't retry" (with reason)
-- _none yet_
+- **NAV-spark trailing-12-month annotation is DONE** (see run #2) — the hero sparkline now
+  reports `summarizeTrend(series).changePct`, not the all-time `totalReturnPct`. Don't redo.
+- **Concurrency hazard — sibling runs can share ONE working copy.** Run #2 observed a sibling
+  run operating in the *same* checkout (not an isolated worktree): it switched branches,
+  committed, and pushed while this run was mid-flight, and its `git add -A` swept this run's
+  *staged* edits into the sibling's commit (`23ba5b4`, mislabeled "docs:"). Lesson for future
+  runs: do NOT `git add -A`/stage in the shared checkout while idle; stage only at the instant
+  of commit, or isolate in a `git worktree` from the start. Verify your change landed under the
+  *intended* commit, not a sibling's.
 
 ## Runs (most recent first)
+
+### 2026-06-30 — honest NAV-spark trailing-return annotation (self-directed run #2)
+- **Assessment:** Drove the live app against the Charter (trust first). Run #35 already
+  hardened the front-page book-read, so trust is strong; the single most disappointing thing
+  left was a subtle but real provenance mismatch in the NAV hero sparkline. It plots
+  `buildPortfolioSeries` — a **trailing-12-month** measured price trajectory of the current
+  book (axis JUL '25 → JUN '26) — yet annotated the line with `model.totalReturnPct`, the
+  **all-time** gain ÷ cost basis. Two different metrics over two different windows, the
+  all-time one mislabeled onto a trailing-year chart (and already shown verbatim in the NAV
+  deltas + source line beside it). Same family of bug as #35: a number presented as something
+  it isn't. Runner-up was simplifying the front page by removing one of the two bottom "your
+  book" bands (PositionSlots / BookComposition) — declined: the journal cautions against
+  treating distinct lenses as redundant, and removing a tested, owner-valued feature is a
+  lower-confidence win than fixing a trust defect.
+- **Move:** deepen/polish (trust-first). `NavSpark` now annotates the line with
+  `summarizeTrend(series).changePct` — the plotted series' own first→last move, drawn from the
+  SAME cleaned series `buildPriceChart` plots, so the badge can never disagree with the line.
+  Badge omitted in demo mode (no fetched history → no honest trailing move to state). No
+  information lost (all-time return retained in the NAV deltas + source line); no new
+  dependency; bundle unchanged (322.83 kB). +1 pinning test (a +10%-proportional history makes
+  the FX-weighted series move exactly +10.00% independent of weights). Independent skeptical
+  reviewer verdict: **SHIP** (badge mathematically pinned to the line; nothing lost; demo-mode
+  omission correct; no other regression). Live preview confirmed the demo badge moved from a
+  mislabeled +12.42% to the honest +32.60% trailing-year move, with +12.42% total still in the
+  deltas.
+- **Result:** shipped to `main` — but via an unusual path: a concurrent **sibling run sharing
+  this working copy** committed this run's staged `App.tsx` + `App.test.tsx` into its own
+  commit `23ba5b4` and pushed it (so the fix + test are live on `main`, 297 tests green, build
+  clean, auto-deploys), rather than through this run's own PR. Verified `origin/main` carries
+  the exact intended change with no extra diff. See the new Standing "don't retry" note above.
 
 ### 2026-06-30 — honest book-read + de-dupe (self-directed run #1)
 - **Assessment:** An independent 4-lens panel judged the live app against the Charter
