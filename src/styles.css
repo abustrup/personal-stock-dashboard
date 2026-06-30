@@ -304,6 +304,14 @@ body > #root {
   color: #d4d8de;
 }
 
+/* Provenance caption under the deltas: how much of the headline is live vs imported. */
+.nav-prov {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted-2);
+  letter-spacing: 0.01em;
+}
+
 .nav-spark {
   border: 1px solid var(--line);
   border-radius: var(--r-inset);

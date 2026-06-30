@@ -516,14 +516,26 @@ describe("App", () => {
     render(<App />);
     await screen.findByText(/LIVE · YHOO/i);
 
-    // The trailing-year badge reports the series' measured move…
+    // The trailing-year badge reports the series' own measured move…
     const sparkHead = await screen.findByText(/portfolio · trailing 12 months/i);
     const badge = sparkHead.parentElement!.querySelector(".total");
     await waitFor(() => expect(badge).toHaveTextContent("+10.00%"));
-    // …and crucially NOT the all-time total return (which still shows in the deltas).
-    expect(badge).not.toHaveTextContent("12.42");
+
+    // …distinct from the hero's all-time return delta (a different window). With
+    // live prices the headline NAV and its deltas are re-priced from the snapshot,
+    // and the hero is honest about coverage: 5 of the 6 demo holdings are priced
+    // here (SOXX has no snapshot), so it reads "5/6 holdings" and the all-time
+    // delta is the live figure, never the sparkline's +10.00%.
     const hero = screen.getByLabelText(/net asset value/i);
-    expect(within(hero).getByText(/\+12\.42%/)).toBeInTheDocument();
+    await screen.findByText(/live prices · 5\/6 holdings/i);
+    const totalDelta = within(hero).getByText(/total/i).closest(".nav-delta");
+    // The hero's all-time delta is the LIVE return — not the sparkline's +10.00%
+    // and not the imported +12.42%. Every covered holding is marked to 110 here,
+    // far below its import price, so the live return is a loss: proof the headline
+    // is genuinely re-priced from the snapshot, not echoing a stored figure.
+    expect(totalDelta).not.toHaveTextContent("10.00%");
+    expect(totalDelta).not.toHaveTextContent("12.42");
+    expect(totalDelta).toHaveTextContent("−");
   });
 
   it("plots holdings and opportunities on the decision map and opens a name", () => {
