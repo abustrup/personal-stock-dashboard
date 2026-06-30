@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   assessInvestability,
+  canonicalExchange,
   collectKnownMarkets,
   DEFAULT_BROKER_SETTINGS,
   fxToDkk,
   investableSymbols,
+  isExchangeUntradable,
   isInvestable,
   reachBreakdown,
   reachGap,
@@ -337,5 +339,68 @@ describe("reachGap", () => {
   it("returns undefined when there are no real ideas", () => {
     expect(reachGap([], settings)).toBeUndefined();
     expect(reachGap([rec(company(), "avoid", 0)], settings)).toBeUndefined();
+  });
+});
+
+describe("canonicalExchange", () => {
+  it("folds the two spellings of Euronext Amsterdam onto one canonical label", () => {
+    expect(canonicalExchange("Amsterdam")).toBe("Euronext Amsterdam");
+    expect(canonicalExchange("Euronext Amsterdam")).toBe("Euronext Amsterdam");
+  });
+
+  it("is case-insensitive and trims surrounding whitespace", () => {
+    expect(canonicalExchange("  amsterdam ")).toBe("Euronext Amsterdam");
+    expect(canonicalExchange("EURONEXT AMSTERDAM")).toBe("Euronext Amsterdam");
+  });
+
+  it("passes an unknown venue through unchanged (only trimmed) — never invents a map", () => {
+    expect(canonicalExchange("NASDAQ")).toBe("NASDAQ");
+    expect(canonicalExchange("Korea Exchange")).toBe("Korea Exchange");
+    expect(canonicalExchange("  XETRA ")).toBe("XETRA");
+  });
+});
+
+describe("isExchangeUntradable", () => {
+  it("blocks a listing whose label differs from the toggled spelling of the same venue", () => {
+    // Mark "Euronext Amsterdam" off; ASML, labelled "Amsterdam", must still be blocked.
+    const amsterdamOff: BrokerSettings = { perTradeBudgetDkk: 5000, untradableExchanges: ["Euronext Amsterdam"] };
+    expect(isExchangeUntradable("Amsterdam", amsterdamOff)).toBe(true);
+    // And the reverse: a setting stored under "Amsterdam" blocks a "Euronext Amsterdam" listing.
+    const legacyOff: BrokerSettings = { perTradeBudgetDkk: 5000, untradableExchanges: ["Amsterdam"] };
+    expect(isExchangeUntradable("Euronext Amsterdam", legacyOff)).toBe(true);
+  });
+
+  it("leaves an unrelated venue tradable", () => {
+    const amsterdamOff: BrokerSettings = { perTradeBudgetDkk: 5000, untradableExchanges: ["Euronext Amsterdam"] };
+    expect(isExchangeUntradable("NASDAQ", amsterdamOff)).toBe(false);
+  });
+});
+
+describe("canonical exchange gate (the ASML mis-gate fix)", () => {
+  it("gates ASML (labelled 'Amsterdam') when the broker marks 'Euronext Amsterdam' off", () => {
+    // ASML carries the universe's "Amsterdam" label; the user toggles the directory's
+    // "Euronext Amsterdam" spelling off. Before canonicalisation the exact-string gate
+    // left ASML buyable — the silent mis-gate this fixes.
+    const settings: BrokerSettings = { perTradeBudgetDkk: 5000, untradableExchanges: ["Euronext Amsterdam"] };
+    const inv = assessInvestability(company({ name: "ASML Holding", symbol: "ASML", exchange: "Amsterdam" }), settings);
+    expect(inv.status).toBe("not_tradable");
+    expect(inv.tradable).toBe(false);
+  });
+
+  it("shows one chip for a venue that two sources spell differently", () => {
+    const markets = collectKnownMarkets(["Amsterdam", "Euronext Amsterdam", "NASDAQ"]);
+    expect(markets).toEqual(["Euronext Amsterdam", "NASDAQ"]);
+  });
+
+  it("groups two differently-labelled listings of one venue under a single off-platform group", () => {
+    const amsterdamOff: BrokerSettings = { perTradeBudgetDkk: 5000, untradableExchanges: ["Euronext Amsterdam"] };
+    const recs = [
+      rec(company({ name: "ASML Holding", symbol: "ASML", exchange: "Amsterdam" }), "watch", 70),
+      rec(company({ name: "BE Semiconductor", symbol: "BESI.AS", exchange: "Euronext Amsterdam" }), "watch", 60),
+    ];
+    const { offPlatform } = reachBreakdown(recs, amsterdamOff);
+    expect(offPlatform).toHaveLength(1);
+    expect(offPlatform[0].exchange).toBe("Euronext Amsterdam");
+    expect(offPlatform[0].names.map((n) => n.symbol)).toEqual(["ASML", "BESI.AS"]);
   });
 });

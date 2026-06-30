@@ -66,8 +66,10 @@ import {
 import { diffModel, snapshotModel, type Change, type ChangeDigest } from "./lib/changes";
 import {
   assessInvestability,
+  canonicalExchange,
   collectKnownMarkets,
   investableSymbols,
+  isExchangeUntradable,
   reachBreakdown,
   reachGap,
   summarizeInvestability,
@@ -1631,12 +1633,15 @@ function BrokerBar({
     onChange({ ...settings, perTradeBudgetDkk: Math.round(value) });
   }
   function toggleMarket(market: string) {
-    const off = settings.untradableExchanges.includes(market);
+    // Compare and store by canonical venue so toggling one spelling of a market also
+    // clears any other spelling of it, and so a freshly-toggled chip gates every name
+    // on that venue however its source labels the listing (e.g. ASML's "Amsterdam").
+    const off = isExchangeUntradable(market, settings);
     onChange({
       ...settings,
       untradableExchanges: off
-        ? settings.untradableExchanges.filter((m) => m !== market)
-        : [...settings.untradableExchanges, market],
+        ? settings.untradableExchanges.filter((m) => canonicalExchange(m) !== canonicalExchange(market))
+        : [...settings.untradableExchanges, canonicalExchange(market)],
     });
   }
   return (
@@ -1678,7 +1683,7 @@ function BrokerBar({
           <span className="broker-field-label">Markets your broker can trade</span>
           <div className="market-chips">
             {markets.map((market) => {
-              const off = settings.untradableExchanges.includes(market);
+              const off = isExchangeUntradable(market, settings);
               return (
                 <button
                   key={market}
@@ -2199,7 +2204,8 @@ function WatchlistBar({
   );
   const showList = open && suggestions.length > 0;
 
-  const isOffBroker = (entry: DirectoryEntry) => untradableExchanges.includes(entry.exchange);
+  const isOffBroker = (entry: DirectoryEntry) =>
+    untradableExchanges.some((m) => canonicalExchange(m) === canonicalExchange(entry.exchange));
 
   // The market <select> only lists the exchanges already seen in the universe; a
   // picked name may sit on another (e.g. Euronext Amsterdam), so surface it as an
