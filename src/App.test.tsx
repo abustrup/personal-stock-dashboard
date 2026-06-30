@@ -383,6 +383,57 @@ describe("App", () => {
     expect(within(screen.getByLabelText(/^Opportunities$/i)).queryByText(/added by you/i)).toBeNull();
   });
 
+  it("resolves a typed company name to its ticker and fills the market the broker gate needs", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+
+    const nameInput = screen.getByLabelText(/company name/i);
+    // Typing a name surfaces matching companies from the bundled directory — the
+    // user never has to know the Yahoo ticker.
+    fireEvent.change(nameInput, { target: { value: "novo" } });
+    const listbox = screen.getByRole("listbox", { name: /matching companies/i });
+    const option = within(listbox).getByRole("option", { name: /Novo Nordisk/i });
+    expect(within(option).getByText("NOVO-B.CO")).toBeInTheDocument();
+
+    // Picking it fills the ticker AND the listing market — even one that isn't a
+    // universe exchange — so the broker tradability gate has a market to judge.
+    fireEvent.mouseDown(option);
+    expect((screen.getByLabelText(/ticker symbol/i) as HTMLInputElement).value).toBe("NOVO-B.CO");
+    expect((screen.getByLabelText(/listing market/i) as HTMLSelectElement).value).toBe("Nasdaq Copenhagen");
+  });
+
+  it("warns at entry when a picked listing sits on a market the broker can't trade", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+    // Mark NASDAQ off the user's platform via the broker controls.
+    fireEvent.click(screen.getByRole("button", { name: "NASDAQ" }));
+
+    const nameInput = screen.getByLabelText(/company name/i);
+    fireEvent.change(nameInput, { target: { value: "Qualcomm" } });
+    const listbox = screen.getByRole("listbox", { name: /matching companies/i });
+    const option = within(listbox).getByRole("option", { name: /Qualcomm/i });
+    // Qualcomm lists on NASDAQ, now off the broker, so the row carries the same
+    // "Off Saxo" warning the opportunity ledger uses — before the name is even added.
+    expect(within(option).getByText(/off saxo/i)).toBeInTheDocument();
+
+    fireEvent.mouseDown(option);
+    expect((screen.getByLabelText(/ticker symbol/i) as HTMLInputElement).value).toBe("QCOM");
+    expect(screen.getByRole("status")).toHaveTextContent(/isn.t on your broker/i);
+  });
+
+  it("picks a directory suggestion with the keyboard (arrow down, enter)", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /^Opportunities/ }));
+
+    const nameInput = screen.getByLabelText(/company name/i);
+    fireEvent.change(nameInput, { target: { value: "infineon" } });
+    // Arrow down highlights the first match; Enter selects it instead of submitting.
+    fireEvent.keyDown(nameInput, { key: "ArrowDown" });
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+    expect((screen.getByLabelText(/ticker symbol/i) as HTMLInputElement).value).toBe("IFX.DE");
+    expect((screen.getByLabelText(/listing market/i) as HTMLSelectElement).value).toBe("XETRA");
+  });
+
   it("sizes the front-page lead idea once a refresh's prices arrive (cache isn't stale)", async () => {
     // The lead opportunity (TSMC, top of the demo set) is assessed on the first
     // render — before the snapshot resolves — so its investability is cached as
