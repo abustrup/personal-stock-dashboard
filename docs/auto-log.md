@@ -21,8 +21,52 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   runs: do NOT `git add -A`/stage in the shared checkout while idle; stage only at the instant
   of commit, or isolate in a `git worktree` from the start. Verify your change landed under the
   *intended* commit, not a sibling's.
+- **Concurrency hazard #2 — a sibling's setup can DELETE your in-flight `auto/*` branch + worktree.**
+  Run #3 created worktree `.claude/worktrees/auto-assess` on `auto/assess-run3`; minutes later a
+  sibling run (`auto/assess-run4`) ran the routine's step-1 "delete stale local `auto/*` branches"
+  and removed run #3's worktree AND branch out from under it (nothing was lost — edits hadn't been
+  written yet). Lessons that worked: (a) isolate the worktree OUTSIDE `.claude/worktrees/`
+  (run #3 used `~/Documents/psd-honest-provenance`), which siblings don't sweep; (b) commit and
+  **push to origin early** so the work survives any local clobber; (c) the step-1 cleanup should
+  only delete `auto/*` branches whose PR is merged/closed — never bare in-flight ones.
 
 ## Runs (most recent first)
+
+### 2026-06-30 — honest score-header provenance label (self-directed run #3)
+- **Assessment:** Drove the live app across all five views with **real** Yahoo data (`npm run
+  refresh`, 41/41 priced). The product is mature and honest: provenance labels are dynamic and
+  correct (MEASURED price/momentum/fundamentals vs EDITORIAL ai-exposure/geopolitics vs POLICY
+  compliance flip with data presence across Portfolio/Company/Compare), the front page resolves
+  to sized actions ("buy ~1 share TSM", "trim Tesla"), and two numbers I chased as suspicious
+  (TSM "DKK 3,175 ≈ 1 share"; holdings "TODAY" not moving on refresh) both turned out **correct**
+  (TSM ADR is genuinely ~$460; "TODAY" is the broker CSV's `% 1D afk.` position day-return, a
+  legitimate measured-broker figure distinct from Yahoo's security day-change — overriding it
+  would wrongly relabel broker data). My own first read cleared the app as honest. An independent
+  skeptical assessor (run to counter that anchoring) found the real defect: the **detail/standout
+  header printed `measured ? "data-backed" : "editorial"`**, but `measured` (recommendations.ts)
+  flips true on a live *price* alone, while fundamentals (growth/quality/valuation/balance-sheet,
+  ~33% of the weight) come from a **separately-failing** Yahoo endpoint. So in the reachable
+  "priced-but-no-fundamentals" state the *same screen* contradicted itself — header "data-backed"
+  while the DriverBars stamped 4 of 5 fundamental axes "editorial". A value-#1 (trust) overclaim.
+- **Move:** deepen/polish (trust-first). Added `provenanceLabel(rec)` as the single source of
+  truth, mirroring the bars' own `market?.fundamentals` / `market` checks: **"data-backed"** only
+  with fundamentals, **"price-backed"** when only a live price is in, **"editorial only"**
+  otherwise. Both header call sites now use it, so the header can never claim more provenance than
+  the breakdown beneath it. Pure presentational — no scoring math, no factor relabeling, bundle
+  flat (322.88 kB). +4 `provenanceLabel` tests (all tiers incl. the rare live-signal/no-price
+  state, which deliberately under-claims "editorial only" — undercounting is the safe error);
+  corrected a `watchlist` test that conflated "measured" with "data-backed". Runner-up was
+  ship-nothing (a serious contender — the app is strong); the same-screen self-contradiction is
+  what tipped it over the bar. **Verified in the browser** by simulating the degraded state
+  (stripped GOOGL's fundamentals): the Alphabet detail header changed `Data-Backed → Price-Backed`
+  and now agrees with its bars; the front-page caption independently read "fundamentals for 78%".
+  Independent adversarial reviewer verdict: **SHIP — strictly better, no regression** (confirmed
+  the state-c change is a strictly-more-honest under-claim, not a regression; its one
+  non-blocking ask — a test for that state — was added before merge).
+- **Result:** shipped — **#38** (squash `127be3e`); Pages deploy triggered. Note for next runs:
+  "price-backed" is a new one-word label; it reads cleanly in the `[conviction] · [provenance]`
+  slot beside the existing "data-backed", but if a future run touches that header, consider whether
+  the vocabulary deserves a one-line legend.
 
 ### 2026-06-30 — honest NAV-spark trailing-return annotation (self-directed run #2)
 - **Assessment:** Drove the live app against the Charter (trust first). Run #35 already
