@@ -3885,6 +3885,24 @@ body > #root {
   body > #root {
     padding: 16px 12px 32px;
   }
+  /* Section headers stack on narrow screens. Each is a space-between row of a title
+     and a short uppercase eyebrow; with no horizontal slack the eyebrow claimed the
+     row and crushed the title to one word per line. Stacked, the title takes the full
+     width and the eyebrow tucks beneath it as a sub-label — same tracked-caps
+     treatment, just relocated. The first four are the front-page sections; peers-head
+     (detail view, one tap from a holding) carries a variable-length theme eyebrow and
+     gets the same guard so a longer theme can't crush its title. Compact stat headers
+     whose label and value both fit one line (e.g. .zone-head) are deliberately left
+     inline — stacking them would add a gratuitous break, not fix a crush. */
+  .scorecard-head,
+  .holdings-head,
+  .trades-head,
+  .book-comp-head,
+  .peers-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
   /* let the legend's lead-name wrap to its own line instead of crushing the theme */
   .comp-row {
     grid-template-columns: 10px 1fr auto;
