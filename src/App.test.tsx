@@ -115,6 +115,22 @@ describe("App", () => {
     expect(within(band).getByText(/Weights are\s+measured from your import/i)).toBeInTheDocument();
   });
 
+  it("re-expresses the book in the user's own per-trade size as a slot band", () => {
+    render(<App />);
+
+    // The full-width band: the book measured in counts of your typical buy.
+    expect(screen.getByRole("heading", { name: /your book in your own trades/i })).toBeInTheDocument();
+    const band = screen.getByLabelText(/your book measured in your own trades/i);
+    // The lead ties the count to the per-trade budget the user sets.
+    expect(within(band).getByText(/of your usual/i)).toBeInTheDocument();
+    // The discrete tile grid is one labelled image spelling out each holding's slot count.
+    expect(within(band).getByRole("img", { name: /your book as \d+ buys of dkk/i })).toBeInTheDocument();
+    // The largest holding is reachable as a link into its detail (lead + legend).
+    expect(within(band).getAllByRole("button", { name: /nvidia/i }).length).toBeGreaterThan(0);
+    // The honesty discipline is stated: measured DKK only, no FX, no editorial.
+    expect(within(band).getByText(/measured dkk only, no fx/i)).toBeInTheDocument();
+  });
+
   it("exposes each holding's model score to assistive technology via the row name", () => {
     render(<App />);
 

@@ -37,6 +37,7 @@ import {
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildBookScorecard, type BookScorecard as BookScorecardModel, type Stance, type StanceSlice } from "./lib/scorecard";
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
+import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./lib/positionSlots";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
@@ -427,7 +428,13 @@ export default function App() {
 
       <div className="view" key={view}>
         {view === "portfolio" && (
-          <PortfolioView portfolio={model.portfolio} insights={insights} nextBuy={nextBuy} onSelect={open} />
+          <PortfolioView
+            portfolio={model.portfolio}
+            insights={insights}
+            nextBuy={nextBuy}
+            perTradeBudgetDkk={brokerSettings.perTradeBudgetDkk}
+            onSelect={open}
+          />
         )}
         {view === "opportunities" && (
           <OpportunitiesOverview
@@ -588,11 +595,13 @@ function PortfolioView({
   portfolio,
   insights,
   nextBuy,
+  perTradeBudgetDkk,
   onSelect,
 }: {
   portfolio: Recommendation[];
   insights: ReturnType<typeof buildInsights>;
   nextBuy?: NextBuy;
+  perTradeBudgetDkk: number;
   onSelect: (symbol: string) => void;
 }) {
   const { needsAttention, concentration, compliance, tilt } = insights;
@@ -601,6 +610,12 @@ function PortfolioView({
   const composition = useMemo(() => buildBookComposition(portfolio), [portfolio]);
   // The model's single verdict on the whole book — the dial that leads the front page.
   const scorecard = useMemo(() => buildBookScorecard(portfolio), [portfolio]);
+  // The book re-expressed in the user's OWN trade size — each position as a count of
+  // their typical buy. Sized against the per-trade budget they set in Opportunities.
+  const slots = useMemo(
+    () => buildPositionSlots(portfolio, perTradeBudgetDkk),
+    [portfolio, perTradeBudgetDkk],
+  );
   return (
     <div className="portfolio-grid">
       {scorecard && <BookScorecard card={scorecard} onSelect={onSelect} />}
@@ -690,9 +705,101 @@ function PortfolioView({
         />
       </aside>
 
+      {slots && <PositionSlots slots={slots} onSelect={onSelect} />}
+
       {composition.holdingCount > 0 && <BookComposition composition={composition} />}
     </div>
   );
+}
+
+// The book re-expressed in the user's OWN trade size — a synthesis a broker can't
+// give. Saxo shows each position's weight; it never tells you that, at the ~5,000 DKK
+// you actually buy in, your biggest name is five or six of your normal buys stacked
+// up. The signature is the DISCRETE tile grid: each tile is ≈ one of your buys, the
+// book laid out as a sheet of trade tickets (largest holding first), so the run of
+// dark tiles for an oversized position is something you SEE, not just a percentage.
+// Deliberately discrete (gapped tiles, counting units) so it never reads as another
+// proportional bar next to the theme band below it. The unit is the per-trade budget
+// from Opportunities; every value is measured DKK (no FX, no editorial), apportioned
+// by the tested largest-remainder math in lib/positionSlots, so the picture can't
+// drift from the numbers. The framing is factual — a count of your buys, not advice.
+const TILE_LEGEND_LIMIT = 5;
+function PositionSlots({ slots, onSelect }: { slots: PositionSlotsModel; onSelect: (symbol: string) => void }) {
+  const { budgetDkk, bookValueDkk, totalSlotsRounded, top, holdings, cells, truncated } = slots;
+  // Colour each holding by its size rank, reusing the composition band's slate ramp so
+  // the front page speaks one palette; the largest position takes the accent.
+  const colorOf = new Map(holdings.map((h, index) => [h.symbol, sliceColor(index)]));
+  const legend = holdings.slice(0, TILE_LEGEND_LIMIT);
+  const restCount = holdings.length - legend.length;
+  const tilesLabel = `Your book as ${totalSlotsRounded} buys of DKK ${formatNumber(budgetDkk)}: ${holdings
+    .map((h) => `${shortName(h.name)} ${h.slots.toFixed(1)}`)
+    .join(", ")}.`;
+  return (
+    <section className="trades" aria-label="Your book measured in your own trades">
+      <div className="trades-head">
+        <h2>Your book in your own trades</h2>
+        <span className="ranked">At your DKK {formatNumber(budgetDkk)} per trade</span>
+      </div>
+
+      <p className="trades-lead">
+        Your <strong>DKK {formatNumber(bookValueDkk)}</strong> book is about{" "}
+        <strong>{totalSlotsRounded}</strong> of your usual <strong>DKK {formatNumber(budgetDkk)}</strong> buys.{" "}
+        <button type="button" className="trades-top-link" onClick={() => onSelect(top.symbol)}>
+          {shortName(top.name)}
+        </button>
+        , your largest, is <strong>{top.slots.toFixed(1)}</strong> of them — you&apos;d repeat your usual trade{" "}
+        {repeatPhrase(top.slots)} to build it from scratch.
+      </p>
+
+      <div className="trades-grid" role="img" aria-label={tilesLabel}>
+        {cells.map((symbol, index) => (
+          <span
+            key={`${symbol}-${index}`}
+            className="trade-tile"
+            style={{ background: colorOf.get(symbol) ?? sliceColor(holdings.length) }}
+            title={`${shortName(holdings.find((h) => h.symbol === symbol)?.name ?? symbol)} · ≈ 1 of your buys`}
+          />
+        ))}
+        {truncated && <span className="trade-more">+{totalSlotsRounded - cells.length}</span>}
+      </div>
+
+      <ul className="trades-legend">
+        {legend.map((h, index) => (
+          <li className="trades-leg-row" key={h.symbol}>
+            <button type="button" className="trades-leg-name" onClick={() => onSelect(h.symbol)}>
+              <span className="trades-swatch" style={{ background: sliceColor(index) }} aria-hidden="true" />
+              {shortName(h.name)}
+            </button>
+            <span className="trades-leg-slots">{h.slots.toFixed(1)}×</span>
+          </li>
+        ))}
+        {restCount > 0 && (
+          <li className="trades-leg-row trades-leg-rest">
+            <span className="trades-leg-name muted">
+              <span className="trades-swatch" style={{ background: sliceColor(legend.length) }} aria-hidden="true" />+
+              {restCount} smaller
+            </span>
+          </li>
+        )}
+      </ul>
+
+      <p className="lt-foot">
+        Sized from your imported position values against the per-trade budget you set in Opportunities — each tile is
+        about one of your buys. Measured DKK only, no FX. A synthesis your broker&apos;s flat positions list never draws.
+      </p>
+    </section>
+  );
+}
+
+// Plain-language framing for how many buys a position is — kept factual (a count of
+// your trades), never a recommendation to trim. Near a whole number it reads "about
+// N times"; mid-way (e.g. 5.5) it gives the bracketing range "5–6 times" so the words
+// stay coherent with the one-decimal figure shown alongside.
+function repeatPhrase(slots: number): string {
+  if (slots < 1.5) return "about once";
+  const nearest = Math.round(slots);
+  if (Math.abs(slots - nearest) < 0.15) return `about ${nearest} times`;
+  return `${Math.floor(slots)}–${Math.ceil(slots)} times`;
 }
 
 // The front-page lead synthesis: the model's verdict on your WHOLE book, in one
