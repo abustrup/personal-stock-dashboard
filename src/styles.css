@@ -4149,6 +4149,17 @@ body > #root {
     flex-direction: column;
     align-items: stretch;
   }
+  /* The topbar stacks here, but its actions row (freshness chip + Import CSV, both
+     nowrap) stayed a non-wrapping flex row — so on the narrowest phones the chip and
+     button together overran the width and the primary action clipped off the right
+     edge. Let the row wrap: the provenance chip anchors the leading edge and the
+     action sits opposite it where they fit, and the button drops to a tidy
+     left-aligned line beneath the chip when they don't. */
+  .topbar-actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 10px 14px;
+  }
   .detail-action {
     text-align: left;
   }
