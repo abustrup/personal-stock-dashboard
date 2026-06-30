@@ -16,7 +16,7 @@ import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
 import { buildDashboardModel } from "./lib/dashboard";
 import { buildInsights, RISK_FACTORS, type HoldingContext, type RiskFactor } from "./lib/insights";
-import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
+import { clamp, mergeMarketSnapshot, rangePosition, type MarketSnapshotMap } from "./lib/market";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
@@ -540,7 +540,7 @@ function DriverBars({ company }: { company: Company }) {
             {d.label} <em>{d.measured ? "measured" : "editorial"}</em>
           </span>
           <div className="driver-track">
-            <div className={`driver-fill ${d.measured ? "m" : "e"}`} style={{ width: `${Math.max(0, Math.min(100, d.value))}%` }} />
+            <div className={`driver-fill ${d.measured ? "m" : "e"}`} style={{ width: `${clamp(d.value)}%` }} />
           </div>
           <span className="driver-val">{Math.round(d.value)}</span>
         </div>
@@ -550,7 +550,7 @@ function DriverBars({ company }: { company: Company }) {
 }
 
 function RangeBar({ low, high, price, currency }: { low: number; high: number; price: number; currency: string }) {
-  const pos = high > low ? Math.max(0, Math.min(100, ((price - low) / (high - low)) * 100)) : 50;
+  const pos = (rangePosition(price, high, low) ?? 0.5) * 100;
   return (
     <div className="range">
       <span className="range-end">{formatPrice(low)}</span>
@@ -567,7 +567,7 @@ function RangeBar({ low, high, price, currency }: { low: number; high: number; p
 function ScoreRing({ score, action, large }: { score: number; action: Recommendation["action"]; large?: boolean }) {
   const r = 20;
   const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - Math.max(0, Math.min(100, score)) / 100);
+  const offset = circ * (1 - clamp(score) / 100);
   // The ring is the dashboard's central decision metric. Expose it to assistive
   // technology as a single labelled image (role="img" so the inner <text> isn't
   // announced on its own as a bare, context-free number); sighted layout is
@@ -667,8 +667,8 @@ function toneOf(value: number): "up" | "down" | undefined {
 }
 
 function toneClass(value: number | undefined): string {
-  if (value === undefined || value === 0) return "";
-  return value > 0 ? "tone-up" : "tone-down";
+  const tone = toneOf(value ?? 0);
+  return tone ? `tone-${tone}` : "";
 }
 
 function formatPrice(value: number): string {

@@ -9,7 +9,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { deriveFundamentalAxes, deriveMarketMetrics } from "../src/lib/market.ts";
+import { clamp, deriveFundamentalAxes, deriveMarketMetrics } from "../src/lib/market.ts";
 import { universe } from "../src/data/universe.ts";
 
 const UA = "Mozilla/5.0";
@@ -61,6 +61,18 @@ for (const symbol of symbols) {
   await sleep(120); // be polite to the public endpoints
 }
 
+// A run that priced nothing means a systemic provider outage (rate-limit, DNS,
+// Yahoo schema change), not "the market is empty". Writing the hollow result
+// would clobber the last good snapshot with {} and silently drop the dashboard
+// to editorial-only data. Preserve the prior file and fail loudly instead.
+if (priced === 0) {
+  console.error(
+    `Refresh aborted: priced 0/${symbols.length} symbols (likely provider outage). ` +
+      `Preserving existing ${outputPath} rather than overwriting it with empty data.`,
+  );
+  process.exit(1);
+}
+
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(
   outputPath,
@@ -83,7 +95,10 @@ async function fetchYahooMarket(symbol) {
 
   try {
     const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!response.ok) return undefined;
+    if (!response.ok) {
+      console.warn(`Yahoo price fetch for ${symbol} returned HTTP ${response.status}.`);
+      return undefined;
+    }
     const data = await response.json();
     const result = data?.chart?.result?.[0];
     const meta = result?.meta;
@@ -113,7 +128,8 @@ async function fetchYahooMarket(symbol) {
       ...metrics,
       asOf: new Date().toISOString(),
     };
-  } catch {
+  } catch (error) {
+    console.warn(`Yahoo price fetch for ${symbol} failed: ${error instanceof Error ? error.message : error}`);
     return undefined;
   }
 }
@@ -224,7 +240,7 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
     const avg =
       relevant.reduce((sum, item) => sum + Number(item.ticker_sentiment_score ?? 0), 0) /
       Math.max(1, relevant.length);
-    const sentiment = Math.max(0, Math.min(100, Math.round(50 + avg * 50)));
+    const sentiment = clamp(Math.round(50 + avg * 50));
 
     return {
       sentiment,

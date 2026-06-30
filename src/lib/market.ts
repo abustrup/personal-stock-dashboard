@@ -11,8 +11,13 @@ export type MarketMetrics = {
 // Approximate trading days per window.
 const LOOKBACK = { month: 21, quarter: 63, halfYear: 126 } as const;
 
-export function clamp01(value: number): number {
+function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+/** Clamp `value` into [min, max]. Defaults to the 0-100 score/percent band. */
+export function clamp(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 /** Percent return over `lookback` trading days, or undefined if history is too short. */
@@ -62,7 +67,7 @@ export function deriveMarketMetrics(input: {
   return { return1m, return3m, return6m, rangePosition: position, momentum };
 }
 
-export type FundamentalInputs = {
+type FundamentalInputs = {
   trailingPE?: number;
   forwardPE?: number;
   priceToSales?: number;
@@ -127,7 +132,7 @@ export function deriveFundamentalAxes(input: FundamentalInputs): {
     bsRisk = 20 + input.debtToEquity * 0.28; // treat as percent: 100% → 48
   }
   if (num(input.currentRatio) && input.currentRatio < 1) bsRisk += (1 - input.currentRatio) * 30;
-  const balanceSheetRisk = Math.round(Math.max(0, Math.min(100, bsRisk)));
+  const balanceSheetRisk = Math.round(clamp(bsRisk));
 
   return { growth, quality, valuationRisk, balanceSheetRisk };
 }

@@ -68,10 +68,18 @@ export type HoldingContext = {
 const SINGLE_NAME_CONCENTRATION_PCT = 25;
 const TOP_THREE_CONCENTRATION_PCT = 60;
 
+// The non-compliance risk axes as one source of truth, so the risk *score* (their
+// sum) and the dominant-axis attribution stay in lockstep — adding or renaming an
+// axis is a single edit here. Compliance is weighted separately per consumer.
+const RISK_AXES: Array<{ factor: RiskFactor; get: (c: Recommendation["company"]) => number }> = [
+  { factor: RISK_FACTORS.valuation, get: (c) => c.valuationRisk },
+  { factor: RISK_FACTORS.balanceSheet, get: (c) => c.balanceSheetRisk },
+  { factor: RISK_FACTORS.geopolitical, get: (c) => c.geopoliticalRisk },
+];
+
 function riskScore(rec: Recommendation): number {
-  const c = rec.company;
   const complianceWeight = rec.compliance.status === "blocked" ? 120 : rec.compliance.status === "restricted" ? 40 : 0;
-  return c.valuationRisk + c.balanceSheetRisk + c.geopoliticalRisk + complianceWeight;
+  return RISK_AXES.reduce((sum, axis) => sum + axis.get(rec.company), complianceWeight);
 }
 
 const ACTION_RANK: Record<string, number> = { avoid: 0, trim: 1, watch: 2, hold: 3, investigate: 4, increase: 5 };
@@ -109,12 +117,13 @@ function dominantRiskFactor(rec: Recommendation): RiskFactor {
   if (rec.compliance.status === "blocked" || rec.compliance.status === "restricted") {
     return RISK_FACTORS.compliance;
   }
-  const axes: Array<[number, RiskFactor]> = [
-    [rec.company.valuationRisk, RISK_FACTORS.valuation],
-    [rec.company.balanceSheetRisk, RISK_FACTORS.balanceSheet],
-    [rec.company.geopoliticalRisk, RISK_FACTORS.geopolitical],
-  ];
-  return axes.sort((a, b) => b[0] - a[0])[0][1];
+  // Argmax over the axes; strict `>` keeps the first declared axis on ties
+  // (valuation > balance-sheet > geopolitical), matching the prior sort order.
+  let top = RISK_AXES[0];
+  for (const axis of RISK_AXES) {
+    if (axis.get(rec.company) > top.get(rec.company)) top = axis;
+  }
+  return top.factor;
 }
 
 /**

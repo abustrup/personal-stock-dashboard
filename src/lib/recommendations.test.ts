@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recommendCompany, scoreContributions } from "./recommendations";
+import { recommendCompany, SCORE_BASE, scoreContributions } from "./recommendations";
 import type { Company } from "./types";
 
 const baseCompany = {
@@ -64,7 +64,6 @@ describe("scoreContributions", () => {
   // The contributions are the single source of truth for the scoring weights:
   // summing them, adding the base and clamping must reproduce the score exactly.
   it("sums (with base + clamp) back to the recommended score", () => {
-    const SCORE_BASE = 26;
     const result = recommendCompany(baseCompany);
     const raw = scoreContributions(baseCompany, result.compliance.status).reduce((sum, c) => sum + c.points, 0);
     const reconstructed = Math.round(Math.max(0, Math.min(100, raw + SCORE_BASE)));
@@ -75,18 +74,18 @@ describe("scoreContributions", () => {
     const contributions = scoreContributions(baseCompany, "unknown");
     const byLabel = new Map(contributions.map((c) => [c.label, c]));
     // Upside drivers push the score up; risk axes push it down.
-    expect(byLabel.get("AI exposure")!.points).toBeGreaterThan(0);
-    expect(byLabel.get("Growth")!.points).toBeGreaterThan(0);
-    expect(byLabel.get("Valuation risk")!.points).toBeLessThan(0);
-    expect(byLabel.get("Balance-sheet risk")!.points).toBeLessThan(0);
+    expect(byLabel.get("AI exposure")?.points).toBeGreaterThan(0);
+    expect(byLabel.get("Growth")?.points).toBeGreaterThan(0);
+    expect(byLabel.get("Valuation risk")?.points).toBeLessThan(0);
+    expect(byLabel.get("Balance-sheet risk")?.points).toBeLessThan(0);
     // The §9.x compliance haircut is always a drag (or zero), never a lift.
-    expect(byLabel.get("Compliance")!.points).toBeLessThanOrEqual(0);
+    expect(byLabel.get("Compliance")?.points).toBeLessThanOrEqual(0);
   });
 
   it("labels provenance honestly: measured only when the data is real", () => {
     // Editorial-only company (no market snapshot, seed signals).
     const editorial = scoreContributions(baseCompany, "unknown");
-    const provenanceOf = (label: string) => editorial.find((c) => c.label === label)!.provenance;
+    const provenanceOf = (label: string) => editorial.find((c) => c.label === label)?.provenance;
     expect(provenanceOf("AI exposure")).toBe("editorial"); // always editorial
     expect(provenanceOf("Geopolitical risk")).toBe("editorial"); // always editorial
     expect(provenanceOf("Compliance")).toBe("policy"); // policy-driven
@@ -112,7 +111,7 @@ describe("scoreContributions", () => {
       },
     };
     const measured = scoreContributions(measuredCompany, "unknown");
-    const mProvenanceOf = (label: string) => measured.find((c) => c.label === label)!.provenance;
+    const mProvenanceOf = (label: string) => measured.find((c) => c.label === label)?.provenance;
     expect(mProvenanceOf("Momentum")).toBe("measured");
     expect(mProvenanceOf("Growth")).toBe("measured");
     expect(mProvenanceOf("Quality")).toBe("measured");

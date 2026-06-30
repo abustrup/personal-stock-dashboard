@@ -1,7 +1,16 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+
+// Without this, App's mount-time fetch for the live snapshot hits a real URL
+// (http://localhost:3000/data/live-signals.json) and the tests pass only because
+// nothing answers. Default every test to a deterministic rejection so the
+// editorial-vs-live assertions never depend on the network; the two tests that
+// exercise a loaded snapshot override this stub in their own bodies.
+beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no snapshot in test")));
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

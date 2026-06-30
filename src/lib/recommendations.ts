@@ -1,4 +1,5 @@
 import { evaluateCompliance, type ComplianceOverrides } from "./compliance";
+import { clamp } from "./market";
 import { dataFreshness } from "./signals";
 import type {
   Company,
@@ -9,7 +10,7 @@ import type {
   SignalDirection,
 } from "./types";
 
-export type HoldingContext = {
+type HoldingContext = {
   owned?: boolean;
   weight?: number;
 };
@@ -24,21 +25,20 @@ export function recommendCompany(
   const holding = holdingContext && "rawSymbol" in holdingContext ? holdingContext : undefined;
   const score = compliance.status === "blocked" ? 0 : Math.round(calculateScore(company, compliance.status));
   const action = compliance.status === "blocked" ? "avoid" : actionForScore(score, owned);
-  const momentumMeasured = Boolean(company.market);
-  const measured =
-    momentumMeasured ||
-    company.newsSignal.freshness === "live" ||
-    company.expertSignal.freshness === "live";
+  const provenance = factorProvenance(company);
+  const momentumMeasured = provenance.momentum === "measured";
+  const fundamentalsMeasured = provenance.fundamentals === "measured";
+  const measured = momentumMeasured || provenance.news === "measured" || provenance.expert === "measured";
 
   return {
     company,
     holding,
     action,
-    conviction: convictionFor(score, measured, Boolean(company.market?.fundamentals)),
+    conviction: convictionFor(score, measured, fundamentalsMeasured),
     measured,
     score,
     headline: buildHeadline(company, compliance.status),
-    reasoning: buildReasoning(company, score, compliance.status, momentumMeasured, Boolean(company.market?.fundamentals)),
+    reasoning: buildReasoning(company, score, compliance.status, momentumMeasured, fundamentalsMeasured),
     downside: downsideFor(company),
     compliance,
     newsSignal: company.newsSignal,
@@ -63,18 +63,40 @@ const compliancePenaltyByStatus: Record<ComplianceStatus, number> = {
 };
 
 /** The constant base every score starts from before factor contributions. */
-const SCORE_BASE = 26;
+export const SCORE_BASE = 26;
 
 /** How each factor's weighted pull on the score was sourced. */
-export type ContributionProvenance = "measured" | "editorial" | "policy";
+type ContributionProvenance = "measured" | "editorial" | "policy";
 
 /** One factor's signed, weighted contribution to the 0-100 score. */
-export type ScoreContribution = {
+type ScoreContribution = {
   label: string;
   /** Signed weighted points pushed onto the score (before the base + clamp). */
   points: number;
   provenance: ContributionProvenance;
 };
+
+/**
+ * Per-factor provenance for the data-driven axes, in one place so the score
+ * explanation (`scoreContributions`) and the recommendation summary
+ * (`recommendCompany`) cannot disagree about what counts as "measured":
+ * momentum is measured once a price snapshot exists; growth/quality/valuation/
+ * balance-sheet only when fundamentals were fetched; news/expert only when their
+ * own feed is live. AI exposure and geopolitical risk are always editorial.
+ */
+function factorProvenance(company: Company): {
+  momentum: ContributionProvenance;
+  fundamentals: ContributionProvenance;
+  news: ContributionProvenance;
+  expert: ContributionProvenance;
+} {
+  return {
+    momentum: company.market ? "measured" : "editorial",
+    fundamentals: company.market?.fundamentals ? "measured" : "editorial",
+    news: company.newsSignal.freshness === "live" ? "measured" : "editorial",
+    expert: company.expertSignal.freshness === "live" ? "measured" : "editorial",
+  };
+}
 
 /**
  * The per-factor weighted contributions behind a company's score. This is the
@@ -91,10 +113,7 @@ export function scoreContributions(
   company: Company,
   complianceStatus: ComplianceStatus,
 ): ScoreContribution[] {
-  const fundamentals: ContributionProvenance = company.market?.fundamentals ? "measured" : "editorial";
-  const momentum: ContributionProvenance = company.market ? "measured" : "editorial";
-  const news: ContributionProvenance = company.newsSignal.freshness === "live" ? "measured" : "editorial";
-  const expert: ContributionProvenance = company.expertSignal.freshness === "live" ? "measured" : "editorial";
+  const { momentum, fundamentals, news, expert } = factorProvenance(company);
 
   return [
     { label: "AI exposure", points: company.aiExposure * 0.2, provenance: "editorial" },
@@ -217,8 +236,4 @@ function directionScore(direction: SignalDirection): number {
   if (direction === "positive") return 72;
   if (direction === "negative") return 28;
   return 50;
-}
-
-function clamp(value: number): number {
-  return Math.max(0, Math.min(100, value));
 }

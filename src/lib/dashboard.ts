@@ -12,7 +12,6 @@ export type DashboardModel = {
   totalReturnPct: number;
   dayGainDkk: number;
   topIdea?: Recommendation;
-  highestRisk?: Recommendation;
 };
 
 export function buildDashboardModel(
@@ -52,7 +51,6 @@ export function buildDashboardModel(
     totalReturnPct: totalCostBasisDkk > 0 ? (totalGainDkk / totalCostBasisDkk) * 100 : 0,
     dayGainDkk,
     topIdea: all.find((item) => item.action !== "avoid"),
-    highestRisk: [...all].sort((a, b) => riskScore(b) - riskScore(a))[0],
   };
 }
 
@@ -90,13 +88,4 @@ function companyFromHolding(holding: Holding): Company {
       sources: [],
     },
   };
-}
-
-function riskScore(recommendation: Recommendation): number {
-  return (
-    recommendation.company.valuationRisk +
-    recommendation.company.balanceSheetRisk +
-    recommendation.company.geopoliticalRisk +
-    (recommendation.compliance.status === "blocked" ? 100 : 0)
-  );
 }

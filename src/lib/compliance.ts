@@ -120,5 +120,3 @@ export function evaluateCompliance(
     source: policySource,
   };
 }
-
-export { permanentNegativeList };
