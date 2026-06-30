@@ -601,4 +601,24 @@ describe("App", () => {
     expect(screen.getByText(/^~6M · \+9\.00%$/)).toBeInTheDocument();
     expect(screen.getByText(/the same series momentum is derived from/i)).toBeInTheDocument();
   });
+
+  it("offers external deep-dive links on the company detail, opening in a new tab", () => {
+    render(<App />);
+    openNvidiaDetail();
+    expect(detailIsOpen()).toBeInTheDocument();
+
+    // The "go deeper" exit hands off to the full external chart the dashboard
+    // doesn't re-render. Yahoo keys on the canonical symbol; TradingView on the
+    // mapped exchange:ticker — both open safely in a new tab.
+    const yahoo = screen.getByRole("link", { name: /yahoo finance/i });
+    expect(yahoo).toHaveAttribute("href", "https://finance.yahoo.com/quote/NVDA");
+    expect(yahoo).toHaveAttribute("target", "_blank");
+    expect(yahoo).toHaveAttribute("rel", expect.stringContaining("noopener"));
+
+    const tradingView = screen.getByRole("link", { name: /tradingview/i });
+    expect(tradingView).toHaveAttribute(
+      "href",
+      "https://www.tradingview.com/chart/?symbol=NASDAQ%3ANVDA",
+    );
+  });
 });
