@@ -46,10 +46,13 @@ npm run refresh
 ```
 
 This fetches keyless Yahoo Finance data (US, EU and Asian listings) for the whole
-universe and writes `public/data/live-signals.json`, which the browser reads at
-load time. Requires Node 22.18+ (the refresh imports the shared TypeScript
-momentum model via native type stripping; see `.nvmrc`). The header shows
-whether the data on screen is live or editorial-only.
+universe **and every name the watchlist picker can add**, then writes
+`public/data/live-signals.json`, which the browser reads at load time. Pre-pricing
+the pickable names means an idea you type in is scored on measured momentum the
+moment you add it — no separate `npm run refresh -- <SYMBOL>` step. Requires Node
+22.18+ (the refresh imports the shared TypeScript momentum model via native type
+stripping; see `.nvmrc`). The header shows whether the data on screen is live or
+editorial-only.
 
 ### Optional news and analyst signals
 
