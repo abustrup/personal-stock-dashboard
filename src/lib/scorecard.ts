@@ -57,6 +57,19 @@ export type BookScorecard = {
    * caveat the dial number carries — high when a refresh has run, low in demo mode.
    */
   measuredShare: number;
+  /**
+   * Share (0-1) of the book's weight whose MOMENTUM input is measured (a live price
+   * snapshot exists) rather than an editorial momentum estimate.
+   */
+  momentumMeasuredShare: number;
+  /**
+   * Share (0-1) of the book's weight whose FUNDAMENTALS (growth / quality / valuation /
+   * balance-sheet) were fetched rather than editorial. Kept distinct from momentum
+   * because the two are sourced independently — and AI exposure and geopolitical risk
+   * are editorial for EVERY name regardless, so neither share is ever a claim that a
+   * whole score is measured.
+   */
+  fundamentalsMeasuredShare: number;
 };
 
 const STANCE_ORDER: Stance[] = ["add", "hold", "reduce"];
@@ -87,11 +100,15 @@ export function buildBookScorecard(portfolio: Recommendation[]): BookScorecard |
   const stanceWeight: Record<Stance, number> = { add: 0, hold: 0, reduce: 0 };
   const stanceCount: Record<Stance, number> = { add: 0, hold: 0, reduce: 0 };
   let measuredWeight = 0;
+  let momentumWeight = 0;
+  let fundamentalsWeight = 0;
   owned.forEach((rec, i) => {
     const stance = stanceForAction(rec.action);
     stanceWeight[stance] += weights[i];
     stanceCount[stance] += 1;
     if (rec.measured) measuredWeight += weights[i];
+    if (rec.company.market) momentumWeight += weights[i];
+    if (rec.company.market?.fundamentals) fundamentalsWeight += weights[i];
   });
 
   const stances: StanceSlice[] = STANCE_ORDER.map((stance) => ({
@@ -114,6 +131,8 @@ export function buildBookScorecard(portfolio: Recommendation[]): BookScorecard |
     best: byScore[0],
     worst: byScore[byScore.length - 1],
     measuredShare: measuredWeight / totalWeight,
+    momentumMeasuredShare: momentumWeight / totalWeight,
+    fundamentalsMeasuredShare: fundamentalsWeight / totalWeight,
   };
 }
 
