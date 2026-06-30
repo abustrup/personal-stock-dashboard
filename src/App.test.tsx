@@ -484,6 +484,48 @@ describe("App", () => {
     expect(within(rail).getByText(/Taiwan Semiconductor/i)).toBeInTheDocument();
   });
 
+  it("annotates the NAV sparkline with its own trailing-12-month move, not the all-time total return", async () => {
+    // Every demo holding gets a price history with the SAME first→last ratio (+10%),
+    // so the FX-weighted portfolio series moves +10.00% over the trailing year
+    // regardless of position sizes. The demo book's all-time total return is +12.42%
+    // (gains 12,406 / cost 99,912) — a deliberately DIFFERENT number, on a different
+    // window. The sparkline sits on the trailing-year line, so its badge must report
+    // the line's own +10.00% move, never echo the +12.42% since-purchase figure.
+    const history = [100, 102, 105, 108, 110]; // +10% first→last
+    const entry = (symbol: string) => ({
+      symbol,
+      price: 110,
+      currency: "USD",
+      momentum: 60,
+      history,
+      asOf: "2026-06-28T18:49:41.386Z",
+    });
+    const snapshot = {
+      generatedAt: "2026-06-28T18:49:41.386Z",
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: entry("NVDA"),
+        AAPL: entry("AAPL"),
+        GOOGL: entry("GOOGL"),
+        MSFT: entry("MSFT"),
+        TSLA: entry("TSLA"),
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    // The trailing-year badge reports the series' measured move…
+    const sparkHead = await screen.findByText(/portfolio · trailing 12 months/i);
+    const badge = sparkHead.parentElement!.querySelector(".total");
+    await waitFor(() => expect(badge).toHaveTextContent("+10.00%"));
+    // …and crucially NOT the all-time total return (which still shows in the deltas).
+    expect(badge).not.toHaveTextContent("12.42");
+    const hero = screen.getByLabelText(/net asset value/i);
+    expect(within(hero).getByText(/\+12\.42%/)).toBeInTheDocument();
+  });
+
   it("plots holdings and opportunities on the decision map and opens a name", () => {
     render(<App />);
 

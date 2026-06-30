@@ -635,14 +635,25 @@ function NavHero({
 const SPARK_DIMS: ChartDims = { width: 340, height: 80, padX: 6, padTop: 6, padBottom: 6 };
 
 function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number }) {
-  const chart = series && series.length >= 2 ? buildPriceChart(series, SPARK_DIMS) : undefined;
+  // Annotate the trailing-year line with ITS OWN measured 12-month move — the change
+  // the plotted series actually shows between its endpoints — never the all-time
+  // total-return-vs-cost. That figure already sits in the NAV deltas above and spans
+  // a different window (since purchase, not the trailing year), so printing it on a
+  // chart whose axis reads e.g. JUL '25 → JUN '26 mislabels what the line depicts.
+  // summarizeTrend reads the SAME cleaned series buildPriceChart plots, so the badge
+  // can never disagree with the line it sits on. Omitted (no badge) in demo mode,
+  // where there is no fetched history and so no honest trailing move to state.
+  const trend = series && series.length >= 2 ? summarizeTrend(series) : undefined;
+  const chart = trend ? buildPriceChart(series!, SPARK_DIMS) : undefined;
   const [startLabel, endLabel] = trailingMonthLabels();
-  const rising = chart ? chart.last.value >= chart.first.value : totalPct >= 0;
+  const rising = trend ? trend.rising : totalPct >= 0;
   return (
     <div className="nav-spark">
       <div className="nav-spark-head">
         <span>Portfolio · trailing 12 months</span>
-        <span className={`total ${totalPct >= 0 ? "tone-up" : "tone-down"}`}>{formatSignedPct(totalPct)}</span>
+        {trend && (
+          <span className={`total ${trend.rising ? "tone-up" : "tone-down"}`}>{formatSignedPct(trend.changePct)}</span>
+        )}
       </div>
       {chart ? (
         <>
