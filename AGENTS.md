@@ -17,6 +17,13 @@ Build this as a local decision-support dashboard, not financial advice.
 - Use `npm run dev` for parallel previews (`npm start`/`npm run preview` use fixed ports — one at a time).
 - Open small PRs to `main`; CI must stay green. `main` auto-deploys to GitHub Pages.
 
+## Self-improvement loop
+
+- The autonomous improvement routine reads two files at the start of every run:
+  - `PRIORITIES.md` — owner-edited steering for *which improvement to build next*. The routine picks the top unbuilt item under "Now" and only appends to "Done"; the owner owns the rest.
+  - `docs/auto-log.md` — the routine's cross-run memory: what shipped (don't rebuild), what was declined (don't retry), and its own ranked backlog.
+- Keep these distinct from the company-intake queue (GitHub issues, see `#19`), which feeds *new names into the universe* rather than product work.
+
 ## Privacy (public repo)
 
 - This repository is public. Demo data only — never commit a real broker export or real positions (`.gitignore` blocks `*Positioner*.csv`, `*private*.csv`, `/data/`).

@@ -73,6 +73,46 @@ export function fxToDkk(currency: string | undefined): number | undefined {
 const NON_VENUES = new Set(["private proxy", "unknown", "not sure", ""]);
 
 /**
+ * The same physical venue is spelled more than one way across the data sources: the
+ * curated universe labels ASML's listing "Amsterdam" while the add-a-company
+ * directory labels Besi's "Euronext Amsterdam" — both are the one Euronext Amsterdam
+ * market. The tradability gate matches the listing exchange as a free-form string, so
+ * without a canonical form the user would have to mark BOTH spellings off-platform to
+ * block the single market, the broker toggle would show two chips for it, and a name
+ * could slip the gate purely because its label didn't match the one the user toggled
+ * (e.g. marking "Euronext Amsterdam" untradable would silently leave ASML, labelled
+ * "Amsterdam", buyable). Keyed by the lower-cased spelling; the value is the one
+ * canonical label all spellings fold onto.
+ */
+const EXCHANGE_ALIASES: Record<string, string> = {
+  amsterdam: "Euronext Amsterdam",
+  "euronext amsterdam": "Euronext Amsterdam",
+};
+
+/**
+ * Fold a listing exchange onto a single canonical label so a venue is gated, listed
+ * and counted under one identity however its source happens to spell it. Unknown
+ * exchanges pass through unchanged (only trimmed) — the default is to trust the data,
+ * never to invent a mapping for a venue we don't have an explicit alias for.
+ */
+export function canonicalExchange(exchange: string): string {
+  const trimmed = (exchange ?? "").trim();
+  return EXCHANGE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
+/**
+ * Whether a listing exchange is on the broker's untradable list, compared by canonical
+ * identity rather than raw string. Both the company's exchange and every stored setting
+ * are canonicalised before comparing, so "Amsterdam" and "Euronext Amsterdam" gate as
+ * one market — and a setting stored under either spelling keeps working. The gate, the
+ * broker toggle and the add-a-company picker all route through this so the three agree.
+ */
+export function isExchangeUntradable(exchange: string, settings: BrokerSettings): boolean {
+  const canon = canonicalExchange(exchange);
+  return settings.untradableExchanges.some((listed) => canonicalExchange(listed) === canon);
+}
+
+/**
  * The set of markets the broker tradability gate can actually be applied to — the
  * options the "Markets your broker can trade" toggle offers. The gate keys on a
  * free-form `Company.exchange` string, so this must be sourced from EVERY exchange
@@ -82,14 +122,16 @@ const NON_VENUES = new Set(["private proxy", "unknown", "not sure", ""]);
  * and any market already marked off-platform (so a stored setting always keeps a
  * toggle to switch it back on). Without the directory and watched listings, a
  * hand-added Nordic or German name had no toggle at all — the gate stayed blind to
- * a market the broker genuinely may not trade. Editorial non-venues are dropped;
- * the result is de-duplicated and sorted for a stable control order.
+ * a market the broker genuinely may not trade. Editorial non-venues are dropped; every
+ * spelling is folded onto its canonical label so one physical venue shows a single chip
+ * (not a separate "Amsterdam" and "Euronext Amsterdam"); the result is de-duplicated and
+ * sorted for a stable control order.
  */
 export function collectKnownMarkets(exchanges: Iterable<string>): string[] {
   const set = new Set<string>();
   for (const raw of exchanges) {
     const trimmed = (raw ?? "").trim();
-    if (trimmed && !NON_VENUES.has(trimmed.toLowerCase())) set.add(trimmed);
+    if (trimmed && !NON_VENUES.has(trimmed.toLowerCase())) set.add(canonicalExchange(trimmed));
   }
   return [...set].sort((a, b) => a.localeCompare(b));
 }
@@ -129,7 +171,7 @@ const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 export function assessInvestability(company: Company, settings: BrokerSettings): Investability {
   const exchange = company.exchange;
   const budgetDkk = settings.perTradeBudgetDkk;
-  const tradable = !settings.untradableExchanges.includes(exchange);
+  const tradable = !isExchangeUntradable(exchange, settings);
 
   const market = company.market;
   const fx = market ? fxToDkk(market.currency) : undefined;
@@ -308,9 +350,12 @@ export function reachBreakdown(
       fxApprox: inv.fxApprox,
     };
     if (inv.status === "not_tradable") {
-      const list = byExchange.get(inv.exchange) ?? [];
+      // Group under the canonical venue so two spellings of one market (ASML's
+      // "Amsterdam", Besi's "Euronext Amsterdam") share a single off-platform group.
+      const venue = canonicalExchange(inv.exchange);
+      const list = byExchange.get(venue) ?? [];
       list.push(entry);
-      byExchange.set(inv.exchange, list);
+      byExchange.set(venue, list);
     } else if (inv.status === "above_budget") {
       aboveBudget.push(entry);
     }
