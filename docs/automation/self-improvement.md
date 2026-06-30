@@ -44,6 +44,13 @@ When values conflict, follow the Charter's order: **(1) trust & honesty → (2) 
 - **No trade execution.** This is decision support, not a broker. Charts/data must use the
   existing keyless path or a clearly-labelled external embed/link — never add a paid/keyed
   dependency or commit a key.
+- **Differentiate from the broker (Saxo).** Lead with the decision a broker can't give —
+  action + one-line why, EIFO compliance, the measured score, opportunities not owned,
+  portfolio synthesis. Raw broker data (price, P&L, position size) is demoted/labelled
+  "from Saxo", never the headline; charts must be *additive* (annotated with the model's
+  own analysis), never a bare price chart presented as the value.
+- The owner's account profile (budget, broker, untradable markets) lives in app
+  config/defaults, **not** in this prompt or the routine.
 - Keep the UI sparse and calm; keep the backend explicit, tested and auditable.
 
 ## One run, step by step
@@ -55,11 +62,22 @@ When values conflict, follow the Charter's order: **(1) trust & honesty → (2) 
    `README.md`, and **`docs/auto-log.md`** (your own past runs — don't repeat them, build
    on them; the log also carries notes from past runs, e.g. which surfaces are genuinely
    distinct and must not be "consolidated").
-3. **Assess the LIVE app, not your memory.** Run the dev server and actually look at the
-   rendered views (and/or the deployed site). Judge the product honestly against the
-   Charter. Then pick the **single highest-leverage move**. Favour an independent check
-   over your first instinct — a short panel of distinct lenses (trust, coherence,
-   decisiveness, a skeptical cold-read) catches your own anchoring.
+3. **Assess the LIVE app, not your memory** — the heart of the run; do not skip ahead to
+   building. Run the dev server and actually *use* the rendered views as the owner would
+   (and/or the deployed site). Then answer, in writing (this becomes your journal entry):
+   - What is the single most **disappointing** thing about the product right now relative
+     to the Charter? Be specific and critical.
+   - What would a skeptical power-user call confusing, redundant, untrustworthy, missing,
+     or bloated?
+   - Given the value order (**trust & honesty first**), which ONE move most advances the
+     Charter — and why does it beat the runner-up you considered?
+   - Is the run-type **add / deepen / simplify / remove / polish / do-nothing**? All are
+     first-class; prefer restraint/removal when the app is already strong.
+
+   Favour an independent check over your first instinct — a short panel of distinct lenses
+   (trust, coherence, decisiveness, a skeptical cold-read) catches your own anchoring. Only
+   after answering do you commit to a move; "the best move is to ship nothing" is a valid,
+   well-recorded run.
 4. **Implement** on a branch `auto/<short-kebab-slug>`. For any visual/UI work, **first**
    invoke the `/frontend-design:frontend-design` skill to set deliberate aesthetic
    direction, then build to it and match the existing design language and tokens. Keep the
