@@ -32,6 +32,47 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-06-30 — stale-snapshot NAV caption honesty (self-directed run #6)
+- **Assessment:** Drove the LIVE app end-to-end across all five surfaces (own worktree;
+  the preview MCP bound — as in run #4 — to the *main* shared checkout, which carried a
+  ~29-hour-old snapshot, so I assessed the real stale-data state rather than a fresh one).
+  The app is mature and honest: Portfolio (sized verdict + EIFO posture + book synthesis),
+  Opportunities (budget/EIFO-aware buy plans, nothing silently dropped), Map (score×risk
+  zones with stated risk-index method), Compare (per-axis MEASURED/EDITORIAL provenance),
+  and Company (weighted score pulls, reasoning, "status cannot be called clean") all remain
+  genuinely distinct and strong — don't consolidate. Judged trust-first, the single most
+  disappointing thing was a **same-screen self-contradiction on the headline NAV**: run #5
+  correctly demoted the header chip from "LIVE · YHOO" to "YHOO · 29 JUN 14:14 · 29 HOURS
+  OLD" (muted dot) when the snapshot ages past 12h — but the NAV hero caption two lines
+  below still asserted **"Live prices · all 6 holdings"** unconditionally. So over a stale
+  snapshot the screen said "29 HOURS OLD" and "Live prices" at once — the exact §1 overclaim
+  run #5 fixed in the header, left unfixed on the one number the app opens with (and the
+  precise same-screen-contradiction class run #3 treated as tipping-point-worthy). Runner-up
+  considered: ship-nothing (the app is strong) — but this is a real, currently-visible
+  honesty inconsistency on the headline figure, so it clears the bar. The App.tsx-monolith
+  refactor was again declined (internal-only, coherence #3 < trust #1, destabilising). Minor
+  carry-forward noted below: the topbar "Import CSV" button clips off the right edge at 375px.
+- **Move:** deepen/polish (trust-first). Threaded the already-computed `isStale`
+  (App.tsx:236, the same value driving the header chip) into `NavHero` and swapped the
+  caption's leading label: fresh → "Live prices" (unchanged); stale → **"Snapshot prices"**
+  — same grammatical slot, drops the currency claim, still credits the measured Yahoo
+  snapshot (never relabelled "editorial"; stale measured data is still measured). The header
+  chip already names the snapshot's timestamp + age, so the caption deliberately does NOT
+  restate the age (restraint, no duplication). Pure presentational — no scoring/valuation
+  math touched, bundle flat (325.16 kB). Extended run #5's stale-snapshot App test to assert
+  the caption now reads "Snapshot prices ·" and never "Live prices" in that state. 320 tests
+  + build green. *Verification note:* the preview MCP was bound to the main checkout (binding
+  hazard, run #4), and my worktree's own snapshot was fresh, so neither live server exercises
+  the stale branch — the authoritative proof is the rendered-DOM integration test (real `App`,
+  3-day-old snapshot, asserts the flip), plus the live pre-change screenshots showing the
+  contradiction. Same approach run #4 used under the identical constraint.
+- **Result:** _pending reviewer verdict + CI; PR # appended on merge._
+  *Carry-forward:* (1) "Snapshot prices" parallels the header's demotion and reads calm in
+  the muted `.nav-prov` slot; if a future run unifies freshness vocabulary, the header chip,
+  this caption, and the "since last refresh" band could share one age string. (2) Mobile
+  (375px): the topbar "Import CSV" button overflows the right edge — a real but minor craft
+  (#5) issue, intentionally left for a focused topbar-layout run rather than bundled here.
+
 ### 2026-06-30 — freshness-honest data stamp (self-directed run #5)
 - **Assessment:** Drove the LIVE app end-to-end (own worktree dev server, with a real
   `npm run refresh` so I assessed the owner's *measured* view, not demo) across all five
