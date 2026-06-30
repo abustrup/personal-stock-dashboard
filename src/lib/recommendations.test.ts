@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recommendCompany, scoreContributions } from "./recommendations";
+import { provenanceLabel, recommendCompany, scoreContributions } from "./recommendations";
 import type { Company } from "./types";
 
 const baseCompany = {
@@ -119,5 +119,57 @@ describe("scoreContributions", () => {
     expect(mProvenanceOf("Valuation risk")).toBe("measured");
     expect(mProvenanceOf("AI exposure")).toBe("editorial");
     expect(mProvenanceOf("Geopolitical risk")).toBe("editorial");
+  });
+});
+
+describe("provenanceLabel", () => {
+  const pricedNoFundamentals: Company = {
+    ...baseCompany,
+    market: {
+      symbol: "NVDA",
+      price: 198,
+      currency: "USD",
+      momentum: 61,
+      asOf: "2026-06-28T00:00:00.000Z",
+    },
+  };
+  const pricedWithFundamentals: Company = {
+    ...pricedNoFundamentals,
+    market: {
+      ...pricedNoFundamentals.market!,
+      fundamentals: { growth: 80, quality: 78, valuationRisk: 70, balanceSheetRisk: 20 },
+    },
+  };
+
+  it("calls a name 'data-backed' only once fundamentals are measured", () => {
+    expect(provenanceLabel(recommendCompany(pricedWithFundamentals))).toBe("data-backed");
+  });
+
+  it("calls a priced-but-no-fundamentals name 'price-backed', NOT 'data-backed'", () => {
+    // The header must not claim more provenance than the driver bars show: with a
+    // live price but no fundamentals, Growth/Quality/Valuation/Balance-sheet are
+    // still editorial, so the score is only partly measured.
+    const label = provenanceLabel(recommendCompany(pricedNoFundamentals));
+    expect(label).toBe("price-backed");
+    expect(label).not.toBe("data-backed");
+  });
+
+  it("calls an editorial-only name (no market snapshot) 'editorial only'", () => {
+    expect(provenanceLabel(recommendCompany(baseCompany))).toBe("editorial only");
+  });
+
+  it("under-claims a live-signal-but-unpriced name as 'editorial only', never overstating price it lacks", () => {
+    // News/expert feeds merge independently of the price snapshot, so a name can be
+    // `measured` (a live news feed) yet have no market. The header deliberately
+    // under-claims here — "editorial only" — rather than implying a price or
+    // fundamentals it doesn't have. Undercounting provenance is the safe error.
+    const liveNewsNoPrice: Company = {
+      ...baseCompany,
+      newsSignal: { ...baseCompany.newsSignal, freshness: "live" },
+    };
+    const rec = recommendCompany(liveNewsNoPrice);
+    expect(rec.measured).toBe(true);
+    expect(rec.company.market).toBeUndefined();
+    expect(provenanceLabel(rec)).toBe("editorial only");
   });
 });

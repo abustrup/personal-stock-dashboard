@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDashboardModel } from "./dashboard";
-import { recommendCompany } from "./recommendations";
+import { provenanceLabel, recommendCompany } from "./recommendations";
 import { mergeMarketSnapshot } from "./market";
 import type { MarketSnapshot } from "./types";
 import {
@@ -62,7 +62,7 @@ describe("watch entry → company", () => {
     expect(rec.score).toBe(0);
   });
 
-  it("becomes data-backed once a refresh merges a market snapshot for its symbol", () => {
+  it("becomes price-backed (measured, not yet data-backed) once a refresh merges a price-only snapshot", () => {
     const company = watchEntryToCompany(entry());
     const snapshot: MarketSnapshot = {
       symbol: "TSLA",
@@ -76,6 +76,9 @@ describe("watch entry → company", () => {
     const rec = recommendCompany(enriched, undefined, {});
     expect(rec.measured).toBe(true);
     expect(rec.company.momentum).toBe(82);
+    // A price snapshot alone is "price-backed", not "data-backed": fundamentals
+    // are still editorial until they are fetched too.
+    expect(provenanceLabel(rec)).toBe("price-backed");
   });
 });
 

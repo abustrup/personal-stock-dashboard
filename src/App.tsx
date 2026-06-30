@@ -54,7 +54,7 @@ import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
 import { rangeLabel, readRange } from "./lib/range";
-import { OWNED_SCORE_THRESHOLDS, scoreContributions } from "./lib/recommendations";
+import { OWNED_SCORE_THRESHOLDS, provenanceLabel, scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import {
   clearPortfolio,
@@ -2438,7 +2438,7 @@ function StandoutIdea({
       <div className="standout-meta">
         <Action action={rec.action} />
         <span className="standout-conv">
-          {rec.conviction} conviction · {rec.measured ? "data-backed" : "editorial"}
+          {rec.conviction} conviction · {provenanceLabel(rec)}
         </span>
         {company.userAdded && <WatchBadge />}
         {rec.compliance.status !== "unknown" && (
@@ -3041,7 +3041,7 @@ function CompanyDetail({
           </div>
           <Action action={recommendation.action} />
           <div className="detail-conv">
-            {recommendation.conviction} conviction · {recommendation.measured ? "data-backed" : "editorial only"}
+            {recommendation.conviction} conviction · {provenanceLabel(recommendation)}
           </div>
         </div>
       </div>

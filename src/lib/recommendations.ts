@@ -155,6 +155,23 @@ function convictionFor(
   return score >= 62 ? "medium" : "low";
 }
 
+/**
+ * One word for how much real evidence backs the headline score — the label the
+ * detail/standout header prints next to conviction. It tracks the SAME per-factor
+ * provenance the score-driver bars show, so the header can never claim more than
+ * the breakdown beneath it: "data-backed" only once fundamentals are measured;
+ * "price-backed" when a live price is in but fundamentals are still editorial
+ * (~33% of the weighting); "editorial only" when nothing is measured. Mirroring
+ * `DriverBars`' own `market?.fundamentals` / `market` checks keeps the header and
+ * the bars honest about each other. A live news/expert-only name (no price) reads
+ * "editorial only" by design — undercounting provenance is always the safe error.
+ */
+export function provenanceLabel(rec: Recommendation): string {
+  if (rec.company.market?.fundamentals) return "data-backed";
+  if (rec.company.market) return "price-backed";
+  return "editorial only";
+}
+
 // A short, decision-useful "why" — the kind of synthesis a broker dashboard
 // does not give you. Compliance overrides; otherwise the two strongest drivers.
 function buildHeadline(company: Company, complianceStatus: ComplianceStatus): string {
