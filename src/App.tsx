@@ -41,6 +41,7 @@ import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
+import { rangeLabel, readRange } from "./lib/range";
 import { OWNED_SCORE_THRESHOLDS, scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
@@ -1083,6 +1084,37 @@ function BookComposition({ composition }: { composition: BookCompositionModel })
 // tables. The score becomes a number + a 3px microbar (replacing the old ring in
 // lists); badges for user-added, EIFO flags and investability gates sit inline
 // with the name. Columns differ by variant; every value is the model's own.
+// The 52-week range cell: a track from the trailing-year low to high with a marker
+// at the latest price, plus a plain-words band. This is MEASURED context a broker's
+// flat price list never shows at a glance — whether a high-scoring idea is basing
+// near its low or extended near its high. Omits (a quiet dash) for editorial-only
+// names that carry no measured range, so the column never guesses.
+function RangeCell({ market }: { market?: MarketSnapshot }) {
+  const read = readRange(market);
+  if (!read) {
+    return (
+      <span className="lt-range lt-range-empty" aria-label="No 52-week range data">
+        —
+      </span>
+    );
+  }
+  const pct = clampPct(read.pctAboveLow);
+  const bounds =
+    read.low !== undefined && read.high !== undefined
+      ? ` (low ${formatPrice(read.low)}, high ${formatPrice(read.high)} ${read.currency})`
+      : "";
+  const label = `${formatPrice(read.price)} ${read.currency} — ${Math.round(pct)}% of its 52-week range${bounds}; ${read.label}.`;
+  return (
+    <span className={`lt-range band-${read.band}`} role="img" aria-label={label}>
+      <span className="lt-range-track" aria-hidden="true">
+        <span className="lt-range-fill" style={{ width: `${pct}%` }} />
+        <span className="lt-range-marker" style={{ left: `${pct}%` }} />
+      </span>
+      <span className="lt-range-label">{read.shortLabel}</span>
+    </span>
+  );
+}
+
 function LedgerRow({
   item,
   variant,
@@ -1146,6 +1178,7 @@ function LedgerRow({
         </>
       ) : (
         <>
+          <RangeCell market={company.market} />
           <span className={`lt-num lt-today ${toneClass(todayPct)}`}>{formatSignedPct(todayPct)}</span>
           <span className="lt-num lt-region">{regionCode(company.region)}</span>
         </>
@@ -1357,18 +1390,6 @@ function LeadTrend({ market }: { market?: MarketSnapshot }) {
       </span>
     </span>
   );
-}
-
-// Where the latest price sits in its 52-week range, in plain words. Undefined
-// when there's no position to read, so the caption simply omits it rather than
-// guessing.
-function rangeLabel(position: number | undefined): string | undefined {
-  if (position === undefined) return undefined;
-  if (position >= 0.85) return "near 52w high";
-  if (position <= 0.15) return "near 52w low";
-  if (position >= 0.6) return "upper 52w range";
-  if (position <= 0.4) return "lower 52w range";
-  return "mid 52w range";
 }
 
 // Build a measured DKK NAV series for the hero sparkline from the holdings that
@@ -1812,6 +1833,7 @@ function OpportunitiesOverview({
           <span>Company</span>
           <span>Verdict</span>
           <span>Score</span>
+          <span>52-wk range</span>
           <span className="num">Today</span>
           <span className="num">Region</span>
           <span aria-hidden="true" />
