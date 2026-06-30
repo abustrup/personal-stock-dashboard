@@ -15,7 +15,16 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { complianceOverrides } from "./data/complianceOverrides";
 import { seedHoldings } from "./data/portfolioSeed";
 import { universe } from "./data/universe";
@@ -67,6 +76,7 @@ import {
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
+import { searchDirectory, type DirectoryEntry } from "./lib/companyDirectory";
 import {
   addWatchEntry,
   loadWatchlist,
@@ -226,6 +236,18 @@ export default function App() {
     () => buildDashboardModel(holdings, enrichedUniverse, complianceOverrides, enrichedWatchlist),
     [holdings, enrichedUniverse, enrichedWatchlist],
   );
+
+  // Symbols the company-name picker must NOT suggest: anything already owned, already
+  // in the curated set, or already on the watchlist. Hiding them up front means every
+  // suggestion shown is actually addable (the add still validates, but the user never
+  // picks a name only to be told it's a duplicate). Upper-cased to match the directory.
+  const watchExcludeSymbols = useMemo(() => {
+    const set = new Set<string>();
+    for (const company of universe) set.add(company.symbol.toUpperCase());
+    for (const holding of holdings) set.add(holding.symbol.toUpperCase());
+    for (const entry of watchlist) set.add(entry.symbol.toUpperCase());
+    return set;
+  }, [holdings, watchlist]);
   const insights = useMemo(() => buildInsights(model.portfolio, model.opportunities), [model]);
 
   // Investability: which opportunities the user can actually act on through their
@@ -486,6 +508,7 @@ export default function App() {
             hideOffLimits={hideOffLimits}
             onToggleOffLimits={setHideOffLimits}
             watchlist={watchlist}
+            watchExcludeSymbols={watchExcludeSymbols}
             onAddWatch={addToWatchlist}
             onRemoveWatch={removeFromWatchlist}
             onSelect={open}
@@ -1826,6 +1849,7 @@ function OpportunitiesOverview({
   hideOffLimits,
   onToggleOffLimits,
   watchlist,
+  watchExcludeSymbols,
   onAddWatch,
   onRemoveWatch,
   onSelect,
@@ -1842,6 +1866,7 @@ function OpportunitiesOverview({
   hideOffLimits: boolean;
   onToggleOffLimits: (next: boolean) => void;
   watchlist: WatchEntry[];
+  watchExcludeSymbols: ReadonlySet<string>;
   onAddWatch: (input: { name: string; symbol: string; exchange?: string }) => AddWatchError | undefined;
   onRemoveWatch: (symbol: string) => void;
   onSelect: (symbol: string) => void;
@@ -1852,7 +1877,14 @@ function OpportunitiesOverview({
 
   const brokerBar = <BrokerBar settings={settings} markets={markets} onChange={onChangeSettings} />;
   const watchBar = (
-    <WatchlistBar watchlist={watchlist} markets={markets} onAdd={onAddWatch} onRemove={onRemoveWatch} />
+    <WatchlistBar
+      watchlist={watchlist}
+      markets={markets}
+      excludeSymbols={watchExcludeSymbols}
+      untradableExchanges={settings.untradableExchanges}
+      onAdd={onAddWatch}
+      onRemove={onRemoveWatch}
+    />
   );
 
   if (total === 0) {
@@ -2019,11 +2051,15 @@ const ADD_WATCH_MESSAGES: Record<AddWatchError, string> = {
 function WatchlistBar({
   watchlist,
   markets,
+  excludeSymbols,
+  untradableExchanges,
   onAdd,
   onRemove,
 }: {
   watchlist: WatchEntry[];
   markets: string[];
+  excludeSymbols: ReadonlySet<string>;
+  untradableExchanges: string[];
   onAdd: (input: { name: string; symbol: string; exchange?: string }) => AddWatchError | undefined;
   onRemove: (symbol: string) => void;
 }) {
@@ -2031,6 +2067,73 @@ function WatchlistBar({
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState("");
   const [error, setError] = useState<AddWatchError | undefined>();
+  // Picker state: which suggestion is keyboard-highlighted, whether the list is
+  // open, and a one-line heads-up when the picked listing is off the broker.
+  const [active, setActive] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const [offBroker, setOffBroker] = useState<string | undefined>();
+  const listId = "watch-suggestions";
+
+  // Resolve a typed name to real companies (with their canonical Yahoo ticker and
+  // exchange) so the user never has to know the ticker. Already-owned, in-universe
+  // and already-watched symbols are filtered out so every suggestion is addable.
+  const suggestions = useMemo(
+    () => searchDirectory(name, { exclude: excludeSymbols, limit: 6 }),
+    [name, excludeSymbols],
+  );
+  const showList = open && suggestions.length > 0;
+
+  const isOffBroker = (entry: DirectoryEntry) => untradableExchanges.includes(entry.exchange);
+
+  // The market <select> only lists the exchanges already seen in the universe; a
+  // picked name may sit on another (e.g. Euronext Amsterdam), so surface it as an
+  // option too — otherwise the select would silently fail to show the real market.
+  const marketOptions = exchange && !markets.includes(exchange) ? [exchange, ...markets] : markets;
+
+  function reset() {
+    setName("");
+    setSymbol("");
+    setExchange("");
+    setError(undefined);
+    setOffBroker(undefined);
+    setOpen(false);
+    setActive(-1);
+  }
+
+  function choose(entry: DirectoryEntry) {
+    // One pick fills all three fields — the ticker friction this whole control removes.
+    setName(entry.name);
+    setSymbol(entry.symbol);
+    setExchange(entry.exchange);
+    setError(undefined);
+    setOffBroker(isOffBroker(entry) ? entry.exchange : undefined);
+    setOpen(false);
+    setActive(-1);
+  }
+
+  function onNameChange(value: string) {
+    setName(value);
+    setOpen(true);
+    setActive(-1);
+    setOffBroker(undefined);
+  }
+
+  function onNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!showList) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((i) => (i + 1) % suggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (event.key === "Enter" && active >= 0) {
+      event.preventDefault(); // pick the highlighted row instead of submitting
+      choose(suggestions[active]);
+    } else if (event.key === "Escape") {
+      setOpen(false);
+      setActive(-1);
+    }
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -2039,10 +2142,7 @@ function WatchlistBar({
       setError(err);
       return;
     }
-    setName("");
-    setSymbol("");
-    setExchange("");
-    setError(undefined);
+    reset();
   }
 
   return (
@@ -2054,23 +2154,60 @@ function WatchlistBar({
         <div>
           <strong>Watch your own ideas</strong>
           <span>
-            Score a name that isn&apos;t in the set — the same model, your EIFO rules and budget. It starts neutral
-            until you refresh its market data.
+            Search a company by name — we fill in its ticker and market — then score it on the same model, your EIFO
+            rules and budget. It starts neutral until you refresh its market data.
           </span>
         </div>
       </div>
 
       <form className="watch-form" onSubmit={submit}>
-        <label className="watch-field watch-field-name">
-          <span>Company</span>
+        <div className="watch-field watch-field-name watch-combo">
+          <span className="watch-field-label">Company</span>
           <input
             type="text"
             value={name}
-            placeholder="e.g. Tesla"
-            onChange={(event) => setName(event.target.value)}
+            placeholder="Search a company…"
+            onChange={(event) => onNameChange(event.target.value)}
+            onKeyDown={onNameKeyDown}
+            onFocus={() => name && setOpen(true)}
+            onBlur={() => setOpen(false)}
             aria-label="Company name"
+            role="combobox"
+            aria-expanded={showList}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={active >= 0 ? `watch-sug-${active}` : undefined}
+            autoComplete="off"
           />
-        </label>
+          {showList && (
+            <ul className="watch-suggest" id={listId} role="listbox" aria-label="Matching companies">
+              {suggestions.map((entry, index) => {
+                const off = isOffBroker(entry);
+                return (
+                  <li
+                    key={entry.symbol}
+                    id={`watch-sug-${index}`}
+                    role="option"
+                    aria-selected={index === active}
+                    className={`watch-suggest-row${index === active ? " is-active" : ""}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault(); // keep focus; select before the input blurs
+                      choose(entry);
+                    }}
+                    onMouseEnter={() => setActive(index)}
+                  >
+                    <span className="watch-suggest-name">{entry.name}</span>
+                    <span className="watch-suggest-meta">
+                      {off && <span className="watch-suggest-off">Off Saxo</span>}
+                      <span className="watch-suggest-tkr">{entry.symbol}</span>
+                      <span className="watch-suggest-exch">{entry.exchange}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
         <label className="watch-field watch-field-sym">
           <span>Ticker</span>
           <input
@@ -2087,7 +2224,7 @@ function WatchlistBar({
           <span>Market</span>
           <select value={exchange} onChange={(event) => setExchange(event.target.value)} aria-label="Listing market">
             <option value="">Not sure</option>
-            {markets.map((market) => (
+            {marketOptions.map((market) => (
               <option key={market} value={market}>
                 {market}
               </option>
@@ -2100,10 +2237,17 @@ function WatchlistBar({
         </button>
       </form>
 
-      {error && (
+      {error ? (
         <p className="watch-error" role="alert">
           {ADD_WATCH_MESSAGES[error]}
         </p>
+      ) : (
+        offBroker && (
+          <p className="watch-note" role="status">
+            Heads up — {offBroker} isn&apos;t on your broker. The model still scores it; you just can&apos;t buy it
+            here.
+          </p>
+        )
       )}
 
       {watchlist.length > 0 ? (
