@@ -329,3 +329,84 @@ export function reachBreakdown(
 
   return { offPlatform, aboveBudget };
 }
+
+/** One named idea at its model score. */
+export type ReachGapName = {
+  symbol: string;
+  name: string;
+  /** The model's 0–100 score — an editorial read, not a measured market figure. */
+  score: number;
+};
+
+/**
+ * What the broker + budget gates cost in the model's own conviction. `reachBreakdown`
+ * already names *which* ideas are out of reach; this measures *how good the idea you're
+ * losing is* — the field's single highest-scored idea against the highest-scored one
+ * that actually clears both gates. The `gap` is the conviction, in score points, the
+ * constraints keep off the table: a synthesis a broker dashboard (which only ever shows
+ * names you can already trade) can't draw.
+ *
+ * Honesty boundary: `score` is the model's editorial 0–100 read, never a measured market
+ * figure, and the gates are user-declared settings — so this is the cost of *one person's*
+ * account constraints, not a market claim.
+ *
+ * Returns `undefined` when there is nothing to report: no real ideas, the field's best idea
+ * is itself within reach, or an equally-scored idea is buyable (then the gate blocks access
+ * but costs no conviction). When the best idea IS out of reach, the struct is returned even if *nothing* clears the gates
+ * (`topInvestable` undefined) — that "everything good is unreachable" state is the most
+ * important one to surface. Pure and order-independent (scans for the max rather than
+ * trusting input order); `avoid` names (EIFO-blocked / score 0) are never treated as ideas.
+ */
+export type ReachGap = {
+  /** The model's single highest-scored real idea, whether or not you can act on it. */
+  topOverall: ReachGapName;
+  /** Why `topOverall` is out of reach (never "ok"/"unknown" — those don't produce a gap). */
+  topOverallStatus: InvestabilityStatus;
+  /** The highest-scored idea that clears both gates, if any. */
+  topInvestable?: ReachGapName;
+  /** `topOverall.score − topInvestable.score`, clamped ≥ 0; the whole score when none is reachable. */
+  gap: number;
+};
+
+export function reachGap(
+  recommendations: Recommendation[],
+  settings: BrokerSettings,
+): ReachGap | undefined {
+  let topOverall: { rec: Recommendation; status: InvestabilityStatus } | undefined;
+  let topInvestable: Recommendation | undefined;
+
+  for (const rec of recommendations) {
+    if (rec.action === "avoid") continue; // blocked / EIFO names aren't ideas you're losing
+    const inv = assessInvestability(rec.company, settings);
+    if (!topOverall || rec.score > topOverall.rec.score) {
+      topOverall = { rec, status: inv.status };
+    }
+    if (isInvestable(inv) && (!topInvestable || rec.score > topInvestable.score)) {
+      topInvestable = rec;
+    }
+  }
+
+  // Nothing to lose, or the best idea is itself within reach — no conviction cost at the top.
+  const bestIsWithinReach =
+    topOverall && (topOverall.status === "ok" || topOverall.status === "unknown");
+  if (!topOverall || bestIsWithinReach) return undefined;
+
+  const named = (rec: Recommendation): ReachGapName => ({
+    symbol: rec.company.symbol,
+    name: rec.company.name,
+    score: rec.score,
+  });
+  const gap = topInvestable
+    ? Math.max(0, topOverall.rec.score - topInvestable.score)
+    : topOverall.rec.score;
+
+  // An equally-scored idea is buyable — the gate blocks access, but costs no conviction.
+  if (topInvestable && gap === 0) return undefined;
+
+  return {
+    topOverall: named(topOverall.rec),
+    topOverallStatus: topOverall.status,
+    topInvestable: topInvestable ? named(topInvestable) : undefined,
+    gap,
+  };
+}
