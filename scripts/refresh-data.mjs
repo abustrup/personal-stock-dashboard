@@ -12,6 +12,8 @@ import path from "node:path";
 import { deriveFundamentalAxes, deriveMarketMetrics } from "../src/lib/market.ts";
 import { downsample } from "../src/lib/sparkline.ts";
 import { universe } from "../src/data/universe.ts";
+import { COMPANY_DIRECTORY } from "../src/lib/companyDirectory.ts";
+import { collectRefreshSymbols } from "../src/lib/refreshSymbols.ts";
 
 // Points kept in the stored price-path series. ~52 ≈ weekly over a year: enough
 // to draw a faithful line, small enough to keep live-signals.json compact.
@@ -20,13 +22,15 @@ const HISTORY_POINTS = 52;
 const UA = "Mozilla/5.0";
 
 const cliSymbols = process.argv.slice(2);
-// Skip non-listed names (e.g. assetType "private" like SpaceX): their broker
-// proxy symbol can collide with an unrelated public ticker on Yahoo and be
-// mispriced. Such names keep their editorial momentum and stay unpriced.
+// By default, price the whole pickable set: the curated universe PLUS every name
+// the watchlist picker can add (companyDirectory.ts). Pre-pricing the directory
+// means a name the user types is already scored on measured momentum the moment
+// they add it, instead of sitting on a neutral placeholder until a manual
+// `npm run refresh -- <SYMBOL>`. Private/unlisted names are skipped inside the
+// helper (their proxy ticker can collide with an unrelated public symbol). A
+// CLI argument list still overrides everything for a targeted one-off refresh.
 const symbols =
-  cliSymbols.length > 0
-    ? cliSymbols
-    : universe.filter((company) => company.assetType !== "private").map((company) => company.symbol);
+  cliSymbols.length > 0 ? cliSymbols : collectRefreshSymbols(universe, COMPANY_DIRECTORY);
 const outputPath = path.resolve("public/data/live-signals.json");
 
 const apiKeys = {

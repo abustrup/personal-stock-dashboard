@@ -41,8 +41,9 @@ export type DirectoryEntry = {
  * The curated set. Deliberately scoped to notable AI/tech/semiconductor names that
  * are NOT already in the seeded universe — adding one of those is a no-op the form
  * rejects, so listing them here would only show dead suggestions. Symbols and
- * exchanges are the canonical Yahoo values, so `npm run refresh -- <SYMBOL>` resolves
- * real data and the tradability gate keys on the right market.
+ * exchanges are the canonical Yahoo values, so the standard refresh pre-prices the
+ * whole set (see `refreshSymbols.ts`) and the tradability gate keys on the right
+ * market — a name the user picks is scored on measured data the moment it is added.
  */
 export const COMPANY_DIRECTORY: DirectoryEntry[] = [
   // — US software / platforms / AI —
