@@ -32,6 +32,36 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-06-30 — live headline NAV (self-directed run #4, owner-requested)
+- **Assessment:** Owner asked for the portfolio value to track live prices. The headline NAV
+  (and its deltas) was the static imported CSV figure (`sum(holding.marketValueDkk)`) — never
+  re-priced, even though the refresh now runs hourly (#36) and the topbar says "LIVE · YHOO".
+  The one number that opens the app was the one number not living: a usefulness + trust gap.
+- **Move:** add, client-side and tested. New `src/lib/valuation.ts` re-prices each holding at
+  its live price via the **import-implied FX factor** (`marketValueDkk / currentPrice`, which
+  already folds in qty × FX — the same trick the sparkline used, now shared via `importFxFactor`).
+  Headline NAV/today/all-time go live when any holding is priced, with an honest coverage caption
+  ("Live prices · N/M holdings (X% of book) · the rest at your imported value"); uncovered
+  holdings (no snapshot / currency mismatch / no usable import price) fall back to the imported
+  value and are counted, never faked. FX is import-implied, labelled as such (NOT a live feed).
+  Source line relabelled "as imported". `dashboard.ts` / `changes.ts` / `market.ts` / EIFO
+  untouched. 10 new valuation unit tests; NAV test updated to assert the live caption and that
+  the hero flips off the imported +12.42%. 307 tests + build green. Independent adversarial
+  reviewer: **SHIP** (no must-fix, no regressions, honesty pass). Interactive preview was blocked
+  (the MCP preview binds to a sibling worktree on another branch + a held port), so verification
+  leaned on the rendered-DOM integration test.
+- **Next phases (standing roadmap — "live value" as a routine, not a one-off; future runs continue):**
+  - **P2 real FX feed:** `scripts/refresh-data.mjs` fetches `<CUR>DKK=X` (USD/EUR/HKD/KRW/SEK…)
+    via the keyless Yahoo chart endpoint; add `fxRates` + `fxAsOf` to `live-signals.json`.
+    `valuation.ts` then prefers live FX → import-implied → editorial `fxToDkk` (investability.ts),
+    with FX provenance labelled.
+  - **P3 live P&L + per-row live values:** ledger Total/Today columns + weights recomputed live
+    vs `costBasisDkk`, each with provenance.
+  - **P4 staleness & coverage UX:** market-closed / stale states; a nudge to add an unpriced
+    holding to the universe/directory so it gets priced; refresh-failure fallback labelling.
+- **Result:** shipped — #40 (squash-merged; auto-deploys). The hourly refresh keeps it current
+  with no manual action.
+
 ### 2026-06-30 — honest score-header provenance label (self-directed run #3)
 - **Assessment:** Drove the live app across all five views with **real** Yahoo data (`npm run
   refresh`, 41/41 priced). The product is mature and honest: provenance labels are dynamic and
