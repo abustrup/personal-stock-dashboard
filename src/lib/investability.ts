@@ -64,6 +64,36 @@ export function fxToDkk(currency: string | undefined): number | undefined {
   return FX_TO_DKK[currency.toUpperCase()];
 }
 
+/**
+ * Editorial placeholders and non-answers that name no real public venue, so the
+ * broker gate can't map them to a platform and the market toggle must not list
+ * them: private/pre-IPO proxies, unknown imports, and the add-form's "not sure"
+ * default. Matched case-insensitively after trimming.
+ */
+const NON_VENUES = new Set(["private proxy", "unknown", "not sure", ""]);
+
+/**
+ * The set of markets the broker tradability gate can actually be applied to — the
+ * options the "Markets your broker can trade" toggle offers. The gate keys on a
+ * free-form `Company.exchange` string, so this must be sourced from EVERY exchange
+ * a name on screen could carry, not just the curated universe: the curated names,
+ * the bundled add-a-company directory (long-tail listings the picker can add, e.g.
+ * Oslo Børs / XETRA / Nasdaq Copenhagen), whatever the user has already watched,
+ * and any market already marked off-platform (so a stored setting always keeps a
+ * toggle to switch it back on). Without the directory and watched listings, a
+ * hand-added Nordic or German name had no toggle at all — the gate stayed blind to
+ * a market the broker genuinely may not trade. Editorial non-venues are dropped;
+ * the result is de-duplicated and sorted for a stable control order.
+ */
+export function collectKnownMarkets(exchanges: Iterable<string>): string[] {
+  const set = new Set<string>();
+  for (const raw of exchanges) {
+    const trimmed = (raw ?? "").trim();
+    if (trimmed && !NON_VENUES.has(trimmed.toLowerCase())) set.add(trimmed);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
 export type InvestabilityStatus = "ok" | "not_tradable" | "above_budget" | "unknown";
 
 export type Investability = {

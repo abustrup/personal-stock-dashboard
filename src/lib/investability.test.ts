@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assessInvestability,
+  collectKnownMarkets,
   DEFAULT_BROKER_SETTINGS,
   fxToDkk,
   investableSymbols,
@@ -230,5 +231,45 @@ describe("defaults", () => {
   it("ships a 5,000 DKK budget and the Korea Exchange off-platform", () => {
     expect(DEFAULT_BROKER_SETTINGS.perTradeBudgetDkk).toBe(5000);
     expect(DEFAULT_BROKER_SETTINGS.untradableExchanges).toContain("Korea Exchange");
+  });
+});
+
+describe("collectKnownMarkets", () => {
+  it("dedupes and sorts the union of every source", () => {
+    expect(
+      collectKnownMarkets(["NYSE", "NASDAQ", "NYSE", "Oslo Børs", "XETRA", "NASDAQ"]),
+    ).toEqual(["NASDAQ", "NYSE", "Oslo Børs", "XETRA"]);
+  });
+
+  it("drops editorial non-venues and blanks, case-insensitively", () => {
+    expect(
+      collectKnownMarkets(["NASDAQ", "Private proxy", "unknown", "Not Sure", "", "  ", "NYSE"]),
+    ).toEqual(["NASDAQ", "NYSE"]);
+  });
+
+  it("trims surrounding whitespace before comparing and emitting", () => {
+    expect(collectKnownMarkets(["  XETRA  ", "XETRA"])).toEqual(["XETRA"]);
+  });
+
+  it("surfaces a directory-only market the curated universe never lists", () => {
+    // The crux of the gap: a long-tail listing the name-picker can add (Oslo Børs)
+    // must become a toggleable market even though no universe name lists there, so
+    // the broker gate can finally be told the platform can't trade it.
+    const universeExchanges = ["NASDAQ", "NYSE", "Korea Exchange"];
+    const directoryExchanges = ["Oslo Børs", "Nasdaq Copenhagen"];
+    const markets = collectKnownMarkets([...universeExchanges, ...directoryExchanges]);
+    expect(markets).toContain("Oslo Børs");
+    expect(markets).toContain("Nasdaq Copenhagen");
+  });
+
+  it("keeps an off-platform market that no current name lists on, so it stays untoggleable", () => {
+    // A stored untradable market with nothing currently listed there must still
+    // appear, or the user couldn't switch it back on.
+    expect(collectKnownMarkets(["NASDAQ", "Korea Exchange"])).toContain("Korea Exchange");
+  });
+
+  it("returns an empty list when handed nothing usable", () => {
+    expect(collectKnownMarkets([])).toEqual([]);
+    expect(collectKnownMarkets(["Private proxy", ""])).toEqual([]);
   });
 });
