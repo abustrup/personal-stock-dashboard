@@ -353,4 +353,31 @@ export const universe: Company[] = [
     newsSignal: positiveNews("ETF route reduces single-name risk while keeping AI semiconductor exposure.", 61),
     expertSignal: expert("positive", "Expert proxy favors this for diversified AI hardware exposure."),
   },
+  {
+    // Branded z.ai (intl.) / Zhipu AI (domestic); first pure-play LLM
+    // foundation-model developer to IPO (HKEX, Jan 2026), creator of the GLM
+    // framework. Axes are editorial estimates; momentum/fundamentals are
+    // replaced by the measured refresh.
+    name: "Knowledge Atlas Technology",
+    symbol: "2513.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "ai-platform", "cloud"],
+    aiExposure: 95,
+    growth: 80,
+    momentum: 60,
+    quality: 33,
+    valuationRisk: 88,
+    balanceSheetRisk: 45,
+    geopoliticalRisk: 82,
+    newsSignal: neutralNews(
+      "z.ai / Zhipu AI — first pure-play LLM foundation-model developer to list (HKEX, Jan 2026); GLM framework, but pre-profit, richly valued, and exposed to US–China AI restrictions.",
+      52,
+    ),
+    expertSignal: expert(
+      "neutral",
+      "Sell-side constructive on the AGI thesis (e.g. JPMorgan Overweight) offset by valuation and China-AI export risk.",
+    ),
+  },
 ];
