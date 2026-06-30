@@ -57,6 +57,10 @@ describe("App", () => {
     expect(within(scorecard).getByLabelText(/your money by verdict/i)).toBeInTheDocument();
     // The honesty caveat about measured-vs-editorial data is surfaced.
     expect(within(scorecard).getByText(/of your book/i)).toBeInTheDocument();
+    // …and it does NOT overclaim: it names the axes that are editorial for EVERY name,
+    // rather than rounding "has a price snapshot" up to "measured market data behind its
+    // score" (AI exposure carries the largest weight and is always editorial).
+    expect(within(scorecard).getByText(/AI exposure and geopolitics are editorial/i)).toBeInTheDocument();
 
     // The capital-split legend percentages add up to exactly 100 (largest-remainder
     // rounding) — a data-honesty product must not print a partition that sums to 99.
@@ -67,14 +71,16 @@ describe("App", () => {
     expect(pcts.reduce((sum, n) => sum + n, 0)).toBe(100);
   });
 
-  it("the scorecard anchors jump to the holding that carries the book and the one that drags it", () => {
+  it("keeps the book's carrier and drag readable as the top and bottom ledger rows", () => {
     render(<App />);
 
-    const scorecard = screen.getByLabelText(/the model's verdict on your book/i);
-    const carries = within(scorecard).getByText(/carries the book/i).closest("button");
-    expect(carries).not.toBeNull();
-    fireEvent.click(carries!);
-    expect(detailIsOpen()).toBeInTheDocument();
+    // The scorecard's "carries the book / drags it down" anchor cards were dropped as
+    // literal duplicates of the ledger — but the read is not lost: the table is ranked
+    // by score, so the carrier is the top row and the drag is the bottom row.
+    const rows = ledgerRows();
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[0].getAttribute("aria-label")).toMatch(/NVIDIA Corp\./i);
+    expect(rows[rows.length - 1].getAttribute("aria-label")).toMatch(/Tesla Inc\./i);
   });
 
   it("leads the front page with an opportunity you can actually act on, not just the top score", () => {

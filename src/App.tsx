@@ -780,9 +780,9 @@ function PortfolioView({
     <div className="portfolio-grid">
       <RefreshDigest digest={changeDigest} onSelect={onSelect} />
 
-      {scorecard && <BookScorecard card={scorecard} onSelect={onSelect} />}
-
       <section className="holdings" aria-label="Your holdings">
+        {scorecard && <BookScorecard card={scorecard} />}
+
         <div className="holdings-head">
           <h2>Your holdings</h2>
           <span className="ranked">Ranked by model score</span>
@@ -1032,25 +1032,19 @@ function roundedStanceShares(stances: StanceSlice[]): Map<Stance, number> {
   return result;
 }
 
-function BookScorecard({ card, onSelect }: { card: BookScorecardModel; onSelect: (symbol: string) => void }) {
-  const { weightedScore, verdict, toNextTier, stances, measuredShare, best, worst, count } = card;
+function BookScorecard({ card }: { card: BookScorecardModel }) {
+  const { weightedScore, verdict, toNextTier, stances, momentumMeasuredShare, fundamentalsMeasuredShare } = card;
   const arcColor = VERDICT_GAUGE[verdict];
   const dot = gaugePoint(weightedScore);
-  const measuredPct = Math.round(measuredShare * 100);
+  const momentumPct = Math.round(momentumMeasuredShare * 100);
+  const fundamentalsPct = Math.round(fundamentalsMeasuredShare * 100);
   // Capital stances that actually carry weight — the bar and legend skip empty ones.
   const liveStances = stances.filter((s) => s.weightPct > 0.05);
   // Integer shares that sum to exactly 100 for the labels (bar widths stay exact).
   const shares = roundedStanceShares(stances);
-  // A single-holding book is both its own anchor and its own drag — show one card.
-  const splitAnchors = best.company.symbol !== worst.company.symbol;
 
   return (
-    <section className="scorecard" aria-label="The model's verdict on your book">
-      <div className="scorecard-head">
-        <h2>The model&apos;s read on your book</h2>
-        <span className="ranked">Position-weighted · {count} {count === 1 ? "holding" : "holdings"}</span>
-      </div>
-
+    <div className="scorecard" role="group" aria-label="The model's verdict on your book">
       <div className="scorecard-body">
         <div className="gauge" role="img" aria-label={`Your book scores ${weightedScore} out of 100, in ${VERDICT_WORD[verdict]} range.`}>
           <svg viewBox="0 0 200 116" className="gauge-svg" aria-hidden="true">
@@ -1117,30 +1111,15 @@ function BookScorecard({ card, onSelect }: { card: BookScorecardModel; onSelect:
             ))}
           </ul>
 
-          <div className="scorecard-anchors">
-            <button type="button" className="anchor up" onClick={() => onSelect(best.company.symbol)}>
-              <span className="anchor-eyebrow">{splitAnchors ? "Carries the book" : "Your only holding"}</span>
-              <span className="anchor-name">{best.company.name}</span>
-              <span className="anchor-score">{best.score}</span>
-            </button>
-            {splitAnchors && (
-              <button type="button" className="anchor down" onClick={() => onSelect(worst.company.symbol)}>
-                <span className="anchor-eyebrow">Drags it down</span>
-                <span className="anchor-name">{worst.company.name}</span>
-                <span className="anchor-score">{worst.score}</span>
-              </button>
-            )}
-          </div>
-
           <p className="scorecard-foot">
-            {measuredPct >= 50
-              ? `${measuredPct}% of your book has measured market data behind its score; the rest is editorial estimates.`
-              : `Only ${measuredPct}% of your book has measured market data behind its score — run npm run refresh to score it on live momentum & fundamentals.`}{" "}
+            Momentum is measured for {momentumPct}% of your book and fundamentals for {fundamentalsPct}%; AI exposure
+            and geopolitics are editorial for every name.
+            {momentumPct < 50 && " Run npm run refresh to score it on live momentum & fundamentals."}{" "}
             The verdict is the model&apos;s, not your broker&apos;s.
           </p>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 

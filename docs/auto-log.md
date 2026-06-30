@@ -16,6 +16,23 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-06-30 — honest book-read + de-dupe (self-directed run #1)
+- **Assessment:** An independent 4-lens panel judged the live app against the Charter
+  (trust first). The strongest finding was a real honesty defect, not clutter: the
+  front-page book-read caption rounded a "has-a-price-snapshot" flag up to "measured
+  market data behind its score", burying the always-editorial AI-exposure (0.20 weight,
+  the largest) and geopolitics axes — and contradicting the Company-detail / Compare
+  provenance labels. The front page also stacked four synthesis bands, the top one a
+  restatement of the ranked ledger beneath it. NOTE for future runs: the cross-tab
+  "vs the field" lenses (Map / Compare / theme-peers) turned out genuinely DISTINCT on
+  inspection — do not consolidate them as if redundant.
+- **Move:** simplify. Split the conflated measuredShare into honest momentum/fundamentals
+  sub-shares; rewrote the caption to name what's measured and that AI exposure + geopolitics
+  are editorial for every name; folded the scorecard band into a strip atop the ledger and
+  dropped only the Carries/Drags cards (= ledger rows 1 & 6, the table is ranked by score).
+  Trust (#1) + coherence (#3) in one move; −45 lines; zero capability lost.
+- **Result:** shipped — #35 (independent reviewer verdict: SHIP, no regressions).
+
 ### 2026-06-30 — seed assessment
 - **Assessment:** After ~30 runs the app is broad and capable but shows feature-accretion
   strain. "Where does this name sit vs the field?" is expressed in ~four places — the

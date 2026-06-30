@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { buildBookScorecard, stanceForAction } from "./scorecard";
-import type { Company, Recommendation } from "./types";
+import type { Company, MarketSnapshot, Recommendation } from "./types";
+
+// A minimal measured market snapshot; pass `fundamentals` to mark fundamentals fetched.
+const market = (over: Partial<MarketSnapshot> = {}): MarketSnapshot => ({
+  symbol: "X",
+  price: 100,
+  currency: "USD",
+  momentum: 50,
+  asOf: "2026-01-01",
+  ...over,
+});
 
 const company = (over: Partial<Company> & { symbol: string }): Company => ({
   name: over.symbol,
@@ -137,5 +147,36 @@ describe("buildBookScorecard", () => {
       owned({ symbol: "SEED", measured: false, weight: 30 }),
     ])!;
     expect(card.measuredShare).toBeCloseTo(0.7);
+  });
+
+  it("splits the measured share into momentum and fundamentals, which cannot be conflated", () => {
+    // A price snapshot makes MOMENTUM measured; only fetched fundamentals make the
+    // fundamentals axes measured. The two must be reported independently so the dial
+    // caption can never round "has a price" up to "fully measured".
+    const withMomentum: Recommendation = {
+      ...owned({ symbol: "MOM", weight: 50 }),
+      company: { ...company({ symbol: "MOM" }), market: market() },
+    };
+    const withFundamentals: Recommendation = {
+      ...owned({ symbol: "FUN", weight: 50 }),
+      company: {
+        ...company({ symbol: "FUN" }),
+        market: market({
+          fundamentals: { growth: 60, quality: 60, valuationRisk: 40, balanceSheetRisk: 30 },
+        }),
+      },
+    };
+
+    const card = buildBookScorecard([withMomentum, withFundamentals])!;
+    // Both names carry a price snapshot → momentum measured for the whole book…
+    expect(card.momentumMeasuredShare).toBeCloseTo(1);
+    // …but only half the weight has fetched fundamentals.
+    expect(card.fundamentalsMeasuredShare).toBeCloseTo(0.5);
+
+    // A momentum-only book is NOT fundamentals-measured — the conflation the old single
+    // share allowed.
+    const momentumOnly = buildBookScorecard([withMomentum])!;
+    expect(momentumOnly.momentumMeasuredShare).toBeCloseTo(1);
+    expect(momentumOnly.fundamentalsMeasuredShare).toBeCloseTo(0);
   });
 });
