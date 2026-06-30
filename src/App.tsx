@@ -66,6 +66,7 @@ import {
 import { diffModel, snapshotModel, type Change, type ChangeDigest } from "./lib/changes";
 import {
   assessInvestability,
+  collectKnownMarkets,
   investableSymbols,
   reachBreakdown,
   summarizeInvestability,
@@ -76,7 +77,7 @@ import {
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
-import { searchDirectory, type DirectoryEntry } from "./lib/companyDirectory";
+import { COMPANY_DIRECTORY, searchDirectory, type DirectoryEntry } from "./lib/companyDirectory";
 import { researchLinks } from "./lib/externalResearch";
 import {
   addWatchEntry,
@@ -319,15 +320,25 @@ export default function App() {
       }),
     [model.opportunities, model.portfolio, model.totalMarketValueDkk, investabilityFor, nextBuy?.rec.company.symbol],
   );
-  // Markets present in the curated universe — the toggle set the user picks from.
-  // Drop editorial placeholders that aren't real public venues (private/pre-IPO
-  // proxies, unknown imports) so the control only lists markets a broker can map to.
-  const knownMarkets = useMemo(() => {
-    const notAVenue = new Set(["Private proxy", "Unknown"]);
-    return [...new Set(universe.map((company) => company.exchange))]
-      .filter((exchange) => !notAVenue.has(exchange))
-      .sort((a, b) => a.localeCompare(b));
-  }, []);
+  // Every market the broker tradability gate could apply to — the toggle set the
+  // user picks from. Sourced from all four places a name's exchange can come from,
+  // not just the curated universe: the universe, the bundled add-a-company directory
+  // (long-tail listings the picker can add — Oslo Børs, XETRA, Nasdaq Copenhagen…),
+  // names already on screen (`model.all`, which folds in watchlist additions), and
+  // any market already marked off-platform. Without the directory and watched
+  // listings, a hand-added Nordic/German name had no toggle, so the gate could never
+  // be told the broker can't trade it. `collectKnownMarkets` drops non-venues, dedupes
+  // and sorts.
+  const knownMarkets = useMemo(
+    () =>
+      collectKnownMarkets([
+        ...universe.map((company) => company.exchange),
+        ...COMPANY_DIRECTORY.map((entry) => entry.exchange),
+        ...model.all.map((rec) => rec.company.exchange),
+        ...brokerSettings.untradableExchanges,
+      ]),
+    [model.all, brokerSettings.untradableExchanges],
+  );
   const selected =
     model.all.find((recommendation) => recommendation.company.symbol === selectedSymbol) ??
     model.topIdea ??
@@ -1674,8 +1685,9 @@ function BrokerBar({
             })}
           </div>
           <span className="broker-field-hint">
-            Tap a market to mark it off-platform — Saxo Investor doesn&apos;t trade the Korea Exchange, for
-            instance. Off-platform names stay scored, but are flagged so you don&apos;t act on one you can&apos;t buy.
+            Every market a name here — or one you could add by name — can list on. Tap one to mark it
+            off-platform: Saxo Investor doesn&apos;t trade the Korea Exchange, for instance. Off-platform names
+            stay scored, but are flagged so you don&apos;t act on one you can&apos;t buy.
           </span>
         </div>
       </div>
