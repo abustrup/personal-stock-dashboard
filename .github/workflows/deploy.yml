@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
   schedule:
-    # Refresh market data and redeploy every morning (06:00 UTC).
-    - cron: "0 6 * * *"
+    # Refresh market data and redeploy hourly so the LIVE stamp stays under an
+    # hour old. GitHub's scheduler is best-effort (runs can lag a few minutes
+    # under load); the "pages" concurrency group below serialises overlaps.
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 permissions:
