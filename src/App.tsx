@@ -48,6 +48,7 @@ import {
 } from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildBookScorecard, type BookScorecard as BookScorecardModel, type Stance, type StanceSlice } from "./lib/scorecard";
+import { importFxFactor, valuePortfolio, type LiveValuation } from "./lib/valuation";
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./lib/positionSlots";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
@@ -400,12 +401,29 @@ export default function App() {
     setView("portfolio");
   }
 
-  // NAV-hero deltas, all from real model totals. Today's percent is derived from
-  // the aggregate day gain against yesterday's value (NAV minus today's gain).
-  const navToday =
+  // The headline NAV, re-priced from live market data when available.
+  // valuePortfolio re-values each holding at its live price via the import-implied
+  // FX, falling back to the imported value (and counting the gap) for any holding
+  // without a live snapshot — so the figure is honest about how live it really is.
+  const live = useMemo(() => valuePortfolio(model.portfolio), [model.portfolio]);
+  // Today's percent from the imported broker figures — the fallback when nothing is live.
+  const importedToday =
     model.totalMarketValueDkk - model.dayGainDkk > 0
       ? (model.dayGainDkk / (model.totalMarketValueDkk - model.dayGainDkk)) * 100
       : 0;
+  const nav = live.anyLive
+    ? {
+        valueDkk: live.liveValueDkk,
+        totalPct: live.liveReturnPct,
+        totalGainDkk: live.liveGainDkk,
+        todayPct: live.liveDayPct,
+      }
+    : {
+        valueDkk: model.totalMarketValueDkk,
+        totalPct: model.totalReturnPct,
+        totalGainDkk: model.totalGainDkk,
+        todayPct: importedToday,
+      };
   // A measured DKK NAV series for the hero sparkline — undefined in demo mode
   // (no fetched history), in which case the inset shows a graceful empty state.
   const navSeries = useMemo(() => buildPortfolioSeries(model.portfolio), [model.portfolio]);
@@ -476,11 +494,12 @@ export default function App() {
       </header>
 
       <NavHero
-        valueDkk={model.totalMarketValueDkk}
-        totalPct={model.totalReturnPct}
-        totalGainDkk={model.totalGainDkk}
-        todayPct={navToday}
+        valueDkk={nav.valueDkk}
+        totalPct={nav.totalPct}
+        totalGainDkk={nav.totalGainDkk}
+        todayPct={nav.todayPct}
         series={navSeries}
+        live={live}
       />
 
       <nav className="tabs" aria-label="dashboard views">
@@ -503,7 +522,7 @@ export default function App() {
       </nav>
 
       <p className="source-line">
-        {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} · {formatSignedPct(model.totalReturnPct)} total
+        {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} as imported
       </p>
 
       <div className="view" key={view}>
@@ -588,12 +607,14 @@ function NavHero({
   totalGainDkk,
   todayPct,
   series,
+  live,
 }: {
   valueDkk: number;
   totalPct: number;
   totalGainDkk: number;
   todayPct: number;
   series?: number[];
+  live: LiveValuation;
 }) {
   return (
     <section className="hero" aria-label="net asset value">
@@ -626,6 +647,15 @@ function NavHero({
             {formatSignedPct(todayPct)} <span className="unit">today</span>
           </span>
         </div>
+        {live.anyLive ? (
+          <p className="nav-prov">
+            {live.allLive
+              ? `Live prices · all ${live.total} holding${live.total === 1 ? "" : "s"} · converted at your import's FX`
+              : `Live prices · ${live.covered}/${live.total} holdings (${Math.round(live.coveredWeightPct)}% of book) · the rest at your imported value`}
+          </p>
+        ) : (
+          <p className="nav-prov">From your import · run a refresh for live prices</p>
+        )}
       </div>
       <NavSpark series={series} totalPct={totalPct} />
     </section>
@@ -1544,11 +1574,10 @@ function LeadTrend({ market }: { market?: MarketSnapshot }) {
 }
 
 // Build a measured DKK NAV series for the hero sparkline from the holdings that
-// carry fetched price history. Each leg's native-currency history is FX-scaled so
-// its latest point equals the holding's DKK market value (and earlier points track
-// the price ratio), so the summed series is a real DKK portfolio value over the
-// trailing year — its latest total matching the model's NAV. Returns undefined
-// when no holding has history (demo mode), so the hero can show an empty state.
+// carry fetched price history. Each leg's native-currency history is scaled by the
+// same import-implied FX factor the live headline uses (importFxFactor), so the
+// line and the headline NAV move together. Returns undefined when no holding has
+// usable history (demo mode), so the hero can show an empty state.
 function buildPortfolioSeries(portfolio: Recommendation[]): number[] | undefined {
   const legs = portfolio
     .map((rec) => ({ holding: rec.holding, history: rec.company.market?.history }))
@@ -1559,12 +1588,15 @@ function buildPortfolioSeries(portfolio: Recommendation[]): number[] | undefined
   const length = Math.min(...legs.map((leg) => leg.history.length));
   if (length < 2) return undefined;
   const series = new Array<number>(length).fill(0);
+  let contributed = 0;
   for (const { holding, history } of legs) {
+    const factor = importFxFactor(holding);
+    if (factor === undefined) continue;
     const tail = history.slice(history.length - length);
-    const lastPrice = tail[tail.length - 1];
-    const fx = lastPrice > 0 ? holding.marketValueDkk / lastPrice : 0;
-    for (let i = 0; i < length; i += 1) series[i] += tail[i] * fx;
+    for (let i = 0; i < length; i += 1) series[i] += tail[i] * factor;
+    contributed += 1;
   }
+  if (contributed === 0) return undefined;
   return series.map((value) => Math.round(value));
 }
 
