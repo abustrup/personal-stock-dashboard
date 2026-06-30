@@ -32,6 +32,45 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-06-30 — freshness-honest data stamp (self-directed run #5)
+- **Assessment:** Drove the LIVE app end-to-end (own worktree dev server, with a real
+  `npm run refresh` so I assessed the owner's *measured* view, not demo) across all five
+  surfaces — Portfolio, Opportunities, Map, Compare, Detail. The app is mature and honest;
+  runs #1–#4 already hardened front-page provenance and put the headline NAV on live prices,
+  and the cross-tab lenses remain genuinely distinct (don't consolidate). Judged trust-first,
+  the single most disappointing thing was the header **freshness chip**: it was binary — *any*
+  loaded market snapshot → confident green **"LIVE · YHOO · <time>"**; otherwise "EDITORIAL".
+  No staleness check. The owner is the primary user and runs locally: refresh once, open the
+  app days later, and the chip still asserts green "LIVE" over a 3-day-old snapshot. The
+  timestamp was shown but the word "LIVE" actively *claims* currency — the Charter's §1 case
+  (show uncertainty, don't hide it), and the exact "freshness handled non-uniformly" gap the
+  seed assessment named and no run had touched. (Adjacent to run #4's P4 "staleness & coverage
+  UX" roadmap item, but distinct: that is about per-holding market-closed valuation; this is
+  the data-source freshness stamp.) Runner-up considered: breaking up the 3,628-line `App.tsx`
+  monolith — declined as internal-only (coherence #3 < trust #1) and a destabilising rewrite of
+  a working subsystem, against the routine's guardrails.
+- **Move:** deepen/polish (trust-first). New pure, tested `src/lib/freshness.ts`
+  (`describeMarketFreshness(iso, now)` + `FRESH_WINDOW_MS = 12h`, clock injected so time
+  logic is deterministic). The chip now: ≤12h → "LIVE · YHOO · <time>" (unchanged); >12h →
+  **"YHOO · <time> · <N HOURS/DAYS OLD>"** with the existing muted `.stale` styling (grey,
+  non-pulsing dot) — drops the "LIVE" claim, names the age, and **stays credited to Yahoo as
+  measured, never relabelled "EDITORIAL"** (stale measured data is still measured). aria-label
+  varies per state. +8 unit tests (boundaries at 12h/48h, clock-skew clamp, "1 DAYS" grammar
+  avoided, invalid/missing timestamp) + 1 App-level stale-render test. 7 existing App tests had
+  hardcoded `generatedAt: "2026-06-28…"` fixtures switched to `new Date().toISOString()` — now
+  *required*, since with the age check a hardcoded past date would flake stale (dropping "LIVE")
+  whenever CI runs >12h later; the swap keeps them deterministically live and was not
+  load-bearing for any date/digest assertion. Tests green; build clean (+~0.6 kB for the new
+  module). Live-verified: an aged snapshot rendered "YHOO · 27 JUN 15:00 · 3 DAYS OLD" with the
+  demoted grey dot, while every measured number still rendered from the snapshot.
+- **Result:** independent skeptical reviewer verdict **SHIP** (strictly better, no regression;
+  ran its own green `npm test` + `npm run build`). Shipped — #41.
+  *Carry-forward:* the 12h window can label a legitimately-current weekend/overnight snapshot
+  "stale" (Fri-16:00 refresh viewed Sat-10:00 = 18h). Judged non-blocking — production refreshes
+  hourly so it never fires there, and naming the age is still strictly more honest than a silent
+  green "LIVE". A future run *could* make the window market-hours-aware if it ever bites, but
+  don't add that complexity speculatively.
+
 ### 2026-06-30 — live headline NAV (self-directed run #4, owner-requested)
 - **Assessment:** Owner asked for the portfolio value to track live prices. The headline NAV
   (and its deltas) was the static imported CSV figure (`sum(holding.marketValueDkk)`) — never
