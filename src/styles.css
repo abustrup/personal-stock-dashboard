@@ -1944,9 +1944,172 @@ body > #root {
   font-size: 11px;
   color: var(--faint);
 }
+
+/* What your account costs: the conviction gap between the field's best idea and the
+   best one you can act on. Sits under the reach legend, divided like the blocked list. */
+.reach-gap {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--row-line);
+}
+.reach-gap-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.reach-gap-eyebrow {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.reach-gap-delta {
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.reach-gap-delta-num {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.reach-gap-delta-unit {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+/* The signature device: a 0–100 score axis with the gap drawn as the span between
+   the strongest idea you can buy (filled accent dot) and the best one you can't (hollow). */
+.reach-gap-track {
+  position: relative;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--bar-track);
+  margin-bottom: 13px;
+}
+.reach-gap-span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--weight-fill);
+  border-radius: 99px;
+  transform-origin: left center;
+  animation: reach-grow 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.reach-gap-mark {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 99px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--card);
+}
+.reach-gap-mark.in {
+  background: var(--accent);
+}
+.reach-gap-mark.out {
+  background: var(--card);
+  border: 2px solid #5b6577;
+}
+.reach-gap-rows {
+  display: grid;
+  gap: 5px;
+}
+.reach-gap-row {
+  display: grid;
+  grid-template-columns: 2.3rem 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  margin: 0 -7px;
+  padding: 4px 7px;
+  border: none;
+  border-radius: var(--r-inset);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.reach-gap-row:hover {
+  background: var(--inset);
+}
+.reach-gap-score {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.reach-gap-row.out .reach-gap-score {
+  color: var(--muted-2);
+}
+.reach-gap-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body);
+}
+.reach-gap-row:hover .reach-gap-name {
+  color: var(--accent);
+}
+.reach-gap-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.reach-gap-row.in .reach-gap-tag {
+  color: var(--accent);
+}
+.reach-gap-foot {
+  margin: 9px 0 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+.reach-gap-empty .reach-gap-line {
+  margin: 6px 0 0;
+  max-width: 60ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--body);
+}
+.reach-gap-num {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
 @media (max-width: 560px) {
   .reach-block {
     grid-template-columns: 1fr;
+  }
+  /* Drop the long "strongest you can act on" tag onto its own line under the name,
+     so the row never overflows a narrow panel. */
+  .reach-gap-row {
+    grid-template-columns: 2.3rem 1fr;
+    row-gap: 1px;
+  }
+  .reach-gap-score {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .reach-gap-name {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .reach-gap-tag {
+    grid-column: 2;
+    grid-row: 2;
+    white-space: normal;
   }
 }
 .invest-toggle {
@@ -3967,6 +4130,7 @@ body > #root {
 .detail-back:focus-visible,
 .market-chip:focus-visible,
 .reach-name:focus-visible,
+.reach-gap-row:focus-visible,
 .anchor:focus-visible,
 .deepdive-link:focus-visible,
 .next-move:focus-visible {
@@ -3991,7 +4155,8 @@ body > #root {
   .map-mark,
   .ring-arc,
   .live-dot,
-  .reach-seg {
+  .reach-seg,
+  .reach-gap-span {
     animation: none;
     transition: none;
   }

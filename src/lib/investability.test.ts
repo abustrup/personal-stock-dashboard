@@ -7,6 +7,7 @@ import {
   investableSymbols,
   isInvestable,
   reachBreakdown,
+  reachGap,
   summarizeInvestability,
   type BrokerSettings,
 } from "./investability";
@@ -271,5 +272,70 @@ describe("collectKnownMarkets", () => {
   it("returns an empty list when handed nothing usable", () => {
     expect(collectKnownMarkets([])).toEqual([]);
     expect(collectKnownMarkets(["Private proxy", ""])).toEqual([]);
+  });
+});
+
+describe("reachGap", () => {
+  const korea = company({ name: "SK hynix", symbol: "000660.KS", exchange: "Korea Exchange" });
+  const tsmc = company({ name: "TSMC", symbol: "TSM", exchange: "NASDAQ" });
+
+  it("measures the conviction the broker gate keeps off the table", () => {
+    const gap = reachGap([rec(korea, "investigate", 85), rec(tsmc, "investigate", 75)], settings);
+    expect(gap).toBeDefined();
+    expect(gap!.topOverall).toMatchObject({ symbol: "000660.KS", score: 85 });
+    expect(gap!.topOverallStatus).toBe("not_tradable");
+    expect(gap!.topInvestable).toMatchObject({ symbol: "TSM", score: 75 });
+    expect(gap!.gap).toBe(10);
+  });
+
+  it("measures the gap when a single share overshoots the budget", () => {
+    // One ASML share ≈ 2,000 USD ≈ 13,800 DKK, well over the 5,000 budget.
+    const asml = company({ name: "ASML", symbol: "ASML", exchange: "NASDAQ", market: market(2000, "USD") });
+    const amd = company({ name: "AMD", symbol: "AMD", exchange: "NASDAQ", market: market(100, "USD") });
+    const gap = reachGap([rec(asml, "investigate", 80), rec(amd, "investigate", 71)], settings);
+    expect(gap!.topOverallStatus).toBe("above_budget");
+    expect(gap!.topInvestable).toMatchObject({ symbol: "AMD" });
+    expect(gap!.gap).toBe(9);
+  });
+
+  it("reports nothing when the field's best idea is itself within reach", () => {
+    // Best score is a tradable, affordable name — the constraints cost no conviction at the top.
+    expect(reachGap([rec(tsmc, "investigate", 85), rec(korea, "investigate", 70)], settings)).toBeUndefined();
+  });
+
+  it("surfaces the state where the best idea is out of reach and nothing else clears the gates", () => {
+    const samsung = company({ name: "Samsung", symbol: "005930.KS", exchange: "Korea Exchange" });
+    const gap = reachGap([rec(korea, "investigate", 85), rec(samsung, "investigate", 75)], settings);
+    expect(gap!.topOverall.score).toBe(85);
+    expect(gap!.topInvestable).toBeUndefined();
+    expect(gap!.gap).toBe(85); // the whole score is unreachable
+  });
+
+  it("never treats an avoid (EIFO-blocked) name as an idea, on either side", () => {
+    // A blocked name forced to a high score must be ignored as both the top idea and a
+    // reachable one — only real, actionable ideas count toward the gap.
+    const blocked = company({ name: "Blocked Co", symbol: "BLK", exchange: "NASDAQ" });
+    const gap = reachGap(
+      [rec(blocked, "avoid", 90), rec(korea, "investigate", 85), rec(tsmc, "investigate", 75)],
+      settings,
+    );
+    expect(gap!.topOverall.symbol).toBe("000660.KS");
+    expect(gap!.topInvestable!.symbol).toBe("TSM");
+  });
+
+  it("finds the extremes regardless of input order", () => {
+    const gap = reachGap([rec(tsmc, "investigate", 75), rec(korea, "investigate", 85)], settings);
+    expect(gap!.topOverall.score).toBe(85);
+    expect(gap!.topInvestable!.score).toBe(75);
+  });
+
+  it("reports nothing when an equally-scored idea is buyable (access blocked, no conviction lost)", () => {
+    // Best idea is off-broker, but a tradable name matches its score — no conviction cost.
+    expect(reachGap([rec(korea, "investigate", 75), rec(tsmc, "investigate", 75)], settings)).toBeUndefined();
+  });
+
+  it("returns undefined when there are no real ideas", () => {
+    expect(reachGap([], settings)).toBeUndefined();
+    expect(reachGap([rec(company(), "avoid", 0)], settings)).toBeUndefined();
   });
 });

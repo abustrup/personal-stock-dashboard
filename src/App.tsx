@@ -69,11 +69,13 @@ import {
   collectKnownMarkets,
   investableSymbols,
   reachBreakdown,
+  reachGap,
   summarizeInvestability,
   type BrokerSettings,
   type Investability,
   type InvestabilitySummary,
   type ReachBreakdown,
+  type ReachGap,
 } from "./lib/investability";
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
@@ -284,6 +286,13 @@ export default function App() {
   // idea it filtered, even when the rows below are hidden.
   const reach: ReachBreakdown = useMemo(
     () => reachBreakdown(model.opportunities, brokerSettings),
+    [model.opportunities, brokerSettings],
+  );
+  // How much conviction the broker + budget gates cost at the top: the best idea overall
+  // against the best one you can act on. Undefined when there's no cost to report. Built
+  // from the FULL set, independent of the hide-off-limits toggle, like the breakdown above.
+  const gap: ReachGap | undefined = useMemo(
+    () => reachGap(model.opportunities, brokerSettings),
     [model.opportunities, brokerSettings],
   );
   const visibleOpportunities = useMemo(
@@ -511,6 +520,7 @@ export default function App() {
             overview={opportunityOverview}
             summary={investSummary}
             reach={reach}
+            gap={gap}
             nextMoves={nextMoves}
             settings={brokerSettings}
             markets={knownMarkets}
@@ -1707,6 +1717,7 @@ function BrokerBar({
 function ReachPanel({
   summary,
   reach,
+  gap,
   budgetDkk,
   hideOffLimits,
   onToggleOffLimits,
@@ -1714,6 +1725,7 @@ function ReachPanel({
 }: {
   summary: InvestabilitySummary;
   reach: ReachBreakdown;
+  gap: ReachGap | undefined;
   budgetDkk: number;
   hideOffLimits: boolean;
   onToggleOffLimits: (next: boolean) => void;
@@ -1788,6 +1800,8 @@ function ReachPanel({
         )}
       </div>
 
+      {gap && <ConvictionGap gap={gap} onSelect={onSelect} />}
+
       {offLimitsTotal > 0 && (
         <ul className="reach-blocked">
           {reach.offPlatform.map((group) => (
@@ -1841,6 +1855,75 @@ function ReachPanel({
   );
 }
 
+// The conviction your account costs you: the model's highest-scored idea (which you can't
+// reach) measured against the strongest one you can actually act on. The reach panel above
+// names *which* ideas are blocked; this is the one place that says *how good* the idea
+// you're losing is — the synthesis a broker, which only shows what you can already trade,
+// never draws. The score is the model's editorial 0–100 read, labelled as such; the gates
+// are the user's own broker + budget settings. Logic and edge cases live in lib/investability.
+function ConvictionGap({ gap, onSelect }: { gap: ReachGap; onSelect: (symbol: string) => void }) {
+  const { topOverall, topOverallStatus, topInvestable } = gap;
+  const blockedWhy = topOverallStatus === "not_tradable" ? "off your broker" : "over your budget";
+
+  // The whole field is out of reach — there's no second point to plot, so state it plainly.
+  if (!topInvestable) {
+    return (
+      <div className="reach-gap reach-gap-empty">
+        <p className="reach-gap-eyebrow">What your account costs</p>
+        <p className="reach-gap-line">
+          The model&apos;s strongest idea,{" "}
+          <button type="button" className="reach-name" onClick={() => onSelect(topOverall.symbol)}>
+            {topOverall.name}
+          </button>{" "}
+          (<span className="reach-gap-num">{topOverall.score}</span>), is {blockedWhy} — and nothing else
+          here clears both gates at any score.
+        </p>
+      </div>
+    );
+  }
+
+  const lo = topInvestable.score;
+  const hi = topOverall.score;
+  return (
+    <div className="reach-gap">
+      <div className="reach-gap-top">
+        <p className="reach-gap-eyebrow">What your account costs</p>
+        <p className="reach-gap-delta">
+          <span className="reach-gap-delta-num">−{gap.gap}</span>
+          <span className="reach-gap-delta-unit">pts of conviction</span>
+        </p>
+      </div>
+
+      <div
+        className="reach-gap-track"
+        role="img"
+        aria-label={`The model scores ${topOverall.name} ${hi}, but it is ${blockedWhy}. The strongest idea you can act on, ${topInvestable.name}, scores ${lo} — a ${gap.gap}-point gap on the model's 0 to 100 scale.`}
+      >
+        <span className="reach-gap-span" style={{ left: `${lo}%`, width: `${hi - lo}%` }} aria-hidden="true" />
+        <span className="reach-gap-mark in" style={{ left: `${lo}%` }} aria-hidden="true" />
+        <span className="reach-gap-mark out" style={{ left: `${hi}%` }} aria-hidden="true" />
+      </div>
+
+      <div className="reach-gap-rows">
+        <button type="button" className="reach-gap-row out" onClick={() => onSelect(topOverall.symbol)}>
+          <span className="reach-gap-score">{topOverall.score}</span>
+          <span className="reach-gap-name">{topOverall.name}</span>
+          <span className="reach-gap-tag">{blockedWhy}</span>
+        </button>
+        <button type="button" className="reach-gap-row in" onClick={() => onSelect(topInvestable.symbol)}>
+          <span className="reach-gap-score">{topInvestable.score}</span>
+          <span className="reach-gap-name">{topInvestable.name}</span>
+          <span className="reach-gap-tag">strongest you can act on</span>
+        </button>
+      </div>
+
+      <p className="reach-gap-foot">
+        Score is the model&apos;s own 0–100 read — an editorial estimate, not a market price.
+      </p>
+    </div>
+  );
+}
+
 // The Opportunities overview: not a flat ranked list but a map of where your book
 // has no exposure yet. It leads with the single standout idea, then groups every
 // name you don't own by theme — each theme badged with YOUR own exposure to it, so
@@ -1853,6 +1936,7 @@ function OpportunitiesOverview({
   overview,
   summary,
   reach,
+  gap,
   nextMoves,
   settings,
   markets,
@@ -1870,6 +1954,7 @@ function OpportunitiesOverview({
   overview: OpportunityOverview;
   summary: InvestabilitySummary;
   reach: ReachBreakdown;
+  gap: ReachGap | undefined;
   nextMoves: NextMove[];
   settings: BrokerSettings;
   markets: string[];
@@ -1967,6 +2052,7 @@ function OpportunitiesOverview({
       <ReachPanel
         summary={summary}
         reach={reach}
+        gap={gap}
         budgetDkk={settings.perTradeBudgetDkk}
         hideOffLimits={hideOffLimits}
         onToggleOffLimits={onToggleOffLimits}
