@@ -516,6 +516,7 @@ export default function App() {
         todayPct={nav.todayPct}
         series={navSeries}
         live={live}
+        isStale={isStale}
       />
 
       <nav className="tabs" aria-label="dashboard views">
@@ -624,6 +625,7 @@ function NavHero({
   todayPct,
   series,
   live,
+  isStale,
 }: {
   valueDkk: number;
   totalPct: number;
@@ -631,7 +633,15 @@ function NavHero({
   todayPct: number;
   series?: number[];
   live: LiveValuation;
+  isStale: boolean;
 }) {
+  // The prices behind the NAV come from the loaded snapshot, not a live tick. While
+  // that snapshot is fresh, "Live prices" is honest; once it ages past the header
+  // chip's window (isStale), keep crediting the measured Yahoo snapshot — these are
+  // still real prices, never editorial — but stop claiming currency. The header chip
+  // above already names the snapshot's timestamp + age, so the caption only needs to
+  // drop the "Live" claim, not restate the age (Charter §1, no duplication).
+  const priceLabel = isStale ? "Snapshot prices" : "Live prices";
   return (
     <section className="hero" aria-label="net asset value">
       <div>
@@ -666,8 +676,8 @@ function NavHero({
         {live.anyLive ? (
           <p className="nav-prov">
             {live.allLive
-              ? `Live prices · all ${live.total} holding${live.total === 1 ? "" : "s"} · converted at your import's FX`
-              : `Live prices · ${live.covered}/${live.total} holdings (${Math.round(live.coveredWeightPct)}% of book) · the rest at your imported value`}
+              ? `${priceLabel} · all ${live.total} holding${live.total === 1 ? "" : "s"} · converted at your import's FX`
+              : `${priceLabel} · ${live.covered}/${live.total} holdings (${Math.round(live.coveredWeightPct)}% of book) · the rest at your imported value`}
           </p>
         ) : (
           <p className="nav-prov">From your import · run a refresh for live prices</p>

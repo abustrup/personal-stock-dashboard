@@ -645,6 +645,14 @@ describe("App", () => {
     expect(chip).not.toHaveTextContent(/LIVE/i);
     expect(chip).not.toHaveTextContent(/EDITORIAL/i);
     expect(chip.className).toContain("stale");
+
+    // The headline-NAV caption must not contradict the chip directly above it: with a
+    // stale snapshot it drops the "Live prices" claim for "Snapshot prices" — still
+    // crediting the measured Yahoo snapshot, just no longer asserting currency.
+    const hero = screen.getByLabelText(/net asset value/i);
+    const caption = within(hero).getByText(/prices ·/i);
+    expect(caption).toHaveTextContent(/^Snapshot prices ·/i);
+    expect(caption).not.toHaveTextContent(/Live prices/i);
   });
 
   it("draws the annotated price-path chart when history is present", async () => {
