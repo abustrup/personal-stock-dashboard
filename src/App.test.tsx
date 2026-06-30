@@ -47,6 +47,36 @@ describe("App", () => {
     expect(screen.getByText(/\d+% in NVIDIA/i)).toBeInTheDocument();
   });
 
+  it("leads the front page with the model's weighted verdict on the whole book", () => {
+    render(<App />);
+
+    const scorecard = screen.getByLabelText(/the model's verdict on your book/i);
+    // The dial reports a position-weighted score in the model's own verdict language.
+    expect(within(scorecard).getByLabelText(/your book scores \d+ out of 100, in .+ range/i)).toBeInTheDocument();
+    // The capital split partitions the book by verdict, named and accessible.
+    expect(within(scorecard).getByLabelText(/your money by verdict/i)).toBeInTheDocument();
+    // The honesty caveat about measured-vs-editorial data is surfaced.
+    expect(within(scorecard).getByText(/of your book/i)).toBeInTheDocument();
+
+    // The capital-split legend percentages add up to exactly 100 (largest-remainder
+    // rounding) — a data-honesty product must not print a partition that sums to 99.
+    const pcts = within(scorecard)
+      .getAllByText(/^\d+%$/)
+      .map((el) => Number(el.textContent!.replace("%", "")));
+    expect(pcts.length).toBeGreaterThanOrEqual(2);
+    expect(pcts.reduce((sum, n) => sum + n, 0)).toBe(100);
+  });
+
+  it("the scorecard anchors jump to the holding that carries the book and the one that drags it", () => {
+    render(<App />);
+
+    const scorecard = screen.getByLabelText(/the model's verdict on your book/i);
+    const carries = within(scorecard).getByText(/carries the book/i).closest("button");
+    expect(carries).not.toBeNull();
+    fireEvent.click(carries!);
+    expect(detailIsOpen()).toBeInTheDocument();
+  });
+
   it("leads the front page with an opportunity you can actually act on, not just the top score", () => {
     render(<App />);
 
