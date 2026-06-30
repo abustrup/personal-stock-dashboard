@@ -19,10 +19,11 @@ Build this as a local decision-support dashboard, not financial advice.
 
 ## Self-improvement loop
 
-- The autonomous improvement routine reads two files at the start of every run:
-  - `PRIORITIES.md` — owner-edited steering for *which improvement to build next*. The routine picks the top unbuilt item under "Now" and only appends to "Done"; the owner owns the rest.
-  - `docs/auto-log.md` — the routine's cross-run memory: what shipped (don't rebuild), what was declined (don't retry), and its own ranked backlog.
-- Keep these distinct from the company-intake queue (GitHub issues, see `#19`), which feeds *new names into the universe* rather than product work.
+- The autonomous improvement routine is **self-directed, not task-driven**. Each run it:
+  - reads `CHARTER.md` — the durable vision, values (trust & honesty first), taste and guardrails it reasons *toward* (owner-owned; not a task list);
+  - reads `docs/auto-log.md` — its assessment journal: its evolving read of the product, what shipped (don't rebuild), and what's been declined (don't retry);
+  - uses the live app, names the single biggest gap vs the Charter, justifies the highest-leverage move (add / deepen / simplify / remove / polish / do nothing), builds it, and appends a fresh assessment to the journal.
+- Keep this distinct from the company-intake queue (GitHub issues, see `#19`), which feeds *new names into the universe* rather than product work.
 
 ## Privacy (public repo)
 
