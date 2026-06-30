@@ -29,8 +29,60 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   (run #3 used `~/Documents/psd-honest-provenance`), which siblings don't sweep; (b) commit and
   **push to origin early** so the work survives any local clobber; (c) the step-1 cleanup should
   only delete `auto/*` branches whose PR is merged/closed — never bare in-flight ones.
+- **Subagent / reviewer wrong-tree hazard.** Run #7's decision panel had one lens (with filesystem
+  access) confidently declare the topbar freshness-chip defect a *phantom* — because it inspected
+  the divergent **`maintenance/dedup-deadcode-robustness`** branch (where `App.tsx` is ~697 lines
+  and the topbar has no chip), not `main` (3,654-line `App.tsx`, chip present at App.tsx:476-502,
+  the deployed tree). Lesson: when delegating verification to a subagent, anchor it to the exact
+  worktree path + `git rev-parse HEAD`, and treat any "it's not in the code" claim as a tree-mismatch
+  until reconciled against `main`'s real `HEAD`. The panel still paid off — it forced the wrong-tree
+  catch and a deploy-source check (`.github/workflows/deploy.yml` fires on `branches: [main]`).
 
 ## Runs (most recent first)
+
+### 2026-06-30 — mobile topbar clip fix (self-directed run #7)
+- **Assessment:** Drove the LIVE app end-to-end across all five surfaces (own worktree, fresh
+  `npm run refresh` = 41/41 priced + the preview MCP bound, as in runs #4/#6, to the *main*
+  checkout's ~31h-stale snapshot — so I saw both the fresh and the demoted-freshness states). The
+  app is mature and honest: Portfolio (re-priced NAV, honest "Snapshot prices" caption from run #6,
+  weighted book read + capital-by-verdict + measured/editorial provenance line), Opportunities
+  (budget/EIFO-aware), Map (score×risk zones), Compare (per-axis provenance + MODEL'S PICK), and
+  Company (run #3's "Data-Backed"/"Price-Backed"/"Editorial only" header) all remain genuinely
+  distinct and strong — don't consolidate. After runs #1–6 systematically hardened
+  trust/provenance/freshness, I found **NO remaining visible trust defect on desktop** this run.
+  The single clear, currently-visible defect was the one run #6 explicitly deferred to "a focused
+  topbar-layout run": at ≤375px the topbar **"Import CSV" primary action clips ~25px off the right
+  edge**. Root cause: at ≤620px `.topbar` stacks to a column (less horizontal room) but its child
+  `.topbar-actions` flex row stayed `flex-wrap: nowrap` with two `white-space:nowrap` children (the
+  freshness chip + the Import button), so they overran the width and the button clipped. It's a
+  craft (#5) defect that, on the *public, phone-viewable* Pages demo, also dents clarity (#2): the
+  app's only primary action is half-readable at the moment a first-time visitor forms a trust
+  judgment. A 4-lens decision panel (run to counter my own anchoring) returned **3× A (do the fix),
+  1× C (ship-nothing)** — but the lone dissent was inspecting the *wrong branch* (see the new
+  standing hazard above); once reconciled against `main`'s real HEAD + the deploy source, the fix
+  is the right move. Runner-ups declined: B (hunt a deeper trust defect) — would risk inventing
+  severity where the evidence shows none; D (App.tsx-monolith refactor) — perennially declined,
+  internal-only, coherence #3 < trust #1, destabilising.
+- **Move:** polish (clarity/craft). Invoked `/frontend-design` first to set deliberate direction:
+  keep existing tokens + one typeface, no new vocabulary, the best version of this fix is *invisible*
+  (resist a heavy full-width button). Let `.topbar-actions` **wrap** inside the existing ≤620px block
+  (`flex-wrap: wrap; justify-content: space-between; gap: 10px 14px`): on phones wide enough the
+  provenance chip anchors the leading edge and the action sits opposite it (verified at 540px), and
+  the button drops to a tidy left-aligned line beneath the chip on the narrowest screens (verified at
+  375px: button right edge 154 vs the prior clipping 380). Desktop is untouched (rule scoped to
+  ≤620px; verified unchanged at 1280px). Pure CSS — JS bundle flat at 325.16 kB; the freshness chip
+  has no `text-overflow`/`max-width` so wrapping *widens* its room and never truncates the
+  provenance text (no trust regression). Added `src/styles.responsive.test.ts` — a source-assertion
+  guard (jsdom has no layout engine to test responsive overflow behaviourally) that fails if the wrap
+  rule is dropped, proven non-vacuous by the reviewer reverting it. 321 tests + build green.
+- **Result:** independent skeptical reviewer verdict **SHIP** (strictly better, no regression; it
+  read the real files, verified the three-item chip+Reset+Import case left-aligns tidily, confirmed
+  the guard test fails on revert, and confirmed no provenance truncation; no blocking nits). Shipped
+  — _pending PR # + CI; appended on merge._
+  *Carry-forward:* the topbar mobile layout is now clean across 375/540/620/desktop; the freshness
+  vocabulary (header chip, NAV caption, "since last refresh" band) still could share one age string
+  if a future run unifies it (noted since run #6). The remaining standing decline is the App.tsx
+  monolith refactor — still internal-only, still not worth the destabilisation.
 
 ### 2026-06-30 — stale-snapshot NAV caption honesty (self-directed run #6)
 - **Assessment:** Drove the LIVE app end-to-end across all five surfaces (own worktree;
