@@ -1,0 +1,41 @@
+name: Integrate a watchlist company
+description: Queue a company to be researched and added to the curated universe (used by the daily integration routine).
+title: "Integrate: COMPANY (TICKER)"
+labels: ["integrate"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        File this from the dashboard's **Watch your own ideas** box (the "Send to
+        integration queue" link prefills it), or by hand. The daily routine reads
+        open issues with the `integrate` label, researches the company, adds it to
+        `src/data/universe.ts`, refreshes its market data, and opens a pull request.
+  - type: input
+    id: name
+    attributes:
+      label: Company name
+      placeholder: Knowledge Atlas Technology JSC Ltd
+    validations:
+      required: true
+  - type: input
+    id: ticker
+    attributes:
+      label: Ticker / exchange
+      description: As your broker shows it — e.g. "HKG: 2513" or "2513.HK". The routine normalizes it to the Yahoo symbol.
+      placeholder: "HKG: 2513"
+    validations:
+      required: true
+  - type: input
+    id: region
+    attributes:
+      label: Region / listing country (optional)
+      placeholder: Hong Kong
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / thesis (optional)
+      description: Anything you already know — themes, why it's interesting. The routine researches the rest.
+    validations:
+      required: false

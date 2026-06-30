@@ -2147,6 +2147,23 @@ const ADD_WATCH_MESSAGES: Record<AddWatchError, string> = {
   owned: "You already own that — it's in your portfolio, not an opportunity.",
 };
 
+// Build a prefilled GitHub issue URL for the integration queue, so a watched name
+// reaches the repo (as an `integrate`-labelled issue) with one tap — no terminal,
+// no client secret to ship on a static site. The daily routine reads these issues
+// and integrates the company via a PR. See docs/automation/integrate-watchlist.md.
+const REPO_SLUG = "abustrup/personal-stock-dashboard";
+
+function integrationIssueUrl(entry: { name: string; symbol: string; exchange?: string }): string {
+  const params = new URLSearchParams({
+    template: "integrate.yml",
+    title: `Integrate: ${entry.name} (${entry.symbol})`,
+    name: entry.name,
+    ticker: entry.exchange ? `${entry.exchange}: ${entry.symbol}` : entry.symbol,
+  });
+  if (entry.exchange) params.set("region", entry.exchange);
+  return `https://github.com/${REPO_SLUG}/issues/new?${params.toString()}`;
+}
+
 function WatchlistBar({
   watchlist,
   markets,
@@ -2366,8 +2383,16 @@ function WatchlistBar({
             </span>
           ))}
           <span className="watch-hint">
-            Run <code>npm run refresh -- {watchlist.map((entry) => entry.symbol).join(" ")}</code> to score these on
-            live momentum &amp; fundamentals.
+            Skip the terminal — send a name to the integration queue and the daily routine researches, scores &amp;
+            ships it to the live dashboard:{" "}
+            {watchlist.map((entry, index) => (
+              <span key={entry.symbol}>
+                {index > 0 && " · "}
+                <a className="link-button" href={integrationIssueUrl(entry)} target="_blank" rel="noopener noreferrer">
+                  {entry.symbol} ↗
+                </a>
+              </span>
+            ))}
           </span>
         </div>
       ) : (

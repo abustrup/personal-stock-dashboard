@@ -360,8 +360,10 @@ describe("App", () => {
     const panel = screen.getByLabelText(/^Opportunities$/i);
     expect(cardCount()).toBe(before + 1);
     expect(within(panel).getAllByText(/added by you/i).length).toBeGreaterThan(0);
-    // A removable chip and the live refresh hint both appear.
-    expect(within(panel).getByText(/npm run refresh -- NET/i)).toBeInTheDocument();
+    // A removable chip and a one-tap "send to integration queue" link both appear
+    // (the link prefills a GitHub issue the daily routine reads — no terminal).
+    const queueLink = within(panel).getByRole("link", { name: /NET/i });
+    expect(queueLink).toHaveAttribute("href", expect.stringContaining("/issues/new"));
 
     // Adding a name already in the curated set (PLTR is curated but not a demo
     // holding) is rejected with a clear message.
