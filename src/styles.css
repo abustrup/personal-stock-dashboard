@@ -519,7 +519,7 @@ body > #root {
 
 .lt-head.opportunity,
 .lt-row.opportunity {
-  grid-template-columns: 1fr 104px 92px 86px 64px 16px;
+  grid-template-columns: 1fr 104px 92px 132px 86px 64px 16px;
 }
 
 .lt-head {
@@ -621,6 +621,62 @@ body > #root {
   font-size: 12px;
   font-weight: 500;
   color: var(--faint);
+}
+
+/* 52-week range cell: a low→high track with a marker at the latest price. The
+   marker is the read; the faint fill gives "how far above the low" at a glance. */
+.lt-range {
+  display: block;
+  min-width: 0;
+}
+
+.lt-range-empty {
+  color: var(--faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-range-track {
+  display: block;
+  position: relative;
+  height: 6px;
+  background: var(--bar-track);
+  border-radius: 3px;
+}
+
+.lt-range-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: #d8dde6;
+  border-radius: 3px 0 0 3px;
+}
+
+/* Neutral marker on purpose: position in the range is a measured FACT, not a
+   buy/sell verdict (a name near its 52w high is often strong momentum, not a
+   "sell"). The plain-words label carries the meaning; the colour stays neutral. */
+.lt-range-marker {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--card);
+  transform: translate(-50%, -50%);
+}
+
+.lt-range-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lt-weight-num {
@@ -3875,11 +3931,11 @@ body > #root {
   }
   .ledger-scroll .lt-head.opportunity,
   .ledger-scroll .lt-row.opportunity {
-    grid-template-columns: minmax(150px, 1fr) 86px 78px 72px 54px 12px;
-    min-width: 520px;
+    grid-template-columns: minmax(150px, 1fr) 86px 78px 116px 72px 54px 12px;
+    min-width: 640px;
   }
   .ledger-scroll .opp-theme-row {
-    min-width: 520px;
+    min-width: 640px;
   }
   .broker-bar-body {
     grid-template-columns: 1fr;
