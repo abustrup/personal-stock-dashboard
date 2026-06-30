@@ -115,13 +115,24 @@ function calculateScore(company: Company, complianceStatus: ComplianceStatus): n
   return clamp(total + SCORE_BASE);
 }
 
+/**
+ * The score cutoffs that turn an owned holding's 0-100 score into a verdict.
+ * Exported as the single source of truth so any book-level rollup (e.g. the
+ * front-page scorecard) reads a holding's standing in the SAME verdict language
+ * the per-holding action uses — the two can never drift apart.
+ */
+export const OWNED_SCORE_THRESHOLDS = { increase: 72, hold: 56, trim: 42 } as const;
+
+/** The verdict the model gives an owned holding at a given score. */
+export function ownedActionForScore(score: number): RecommendationAction {
+  if (score >= OWNED_SCORE_THRESHOLDS.increase) return "increase";
+  if (score >= OWNED_SCORE_THRESHOLDS.hold) return "hold";
+  if (score >= OWNED_SCORE_THRESHOLDS.trim) return "trim";
+  return "avoid";
+}
+
 function actionForScore(score: number, owned: boolean): RecommendationAction {
-  if (owned) {
-    if (score >= 72) return "increase";
-    if (score >= 56) return "hold";
-    if (score >= 42) return "trim";
-    return "avoid";
-  }
+  if (owned) return ownedActionForScore(score);
 
   if (score >= 66) return "investigate";
   if (score >= 46) return "watch";

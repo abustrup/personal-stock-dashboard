@@ -664,6 +664,277 @@ body > #root {
 }
 
 /* ---------- book composition (full-width band under the portfolio grid) ---------- */
+/* ---------- front-page book scorecard (the model's verdict on the whole book) ---------- */
+/* A full-width lead band: the dial on the left, the capital split and read on the right.
+   It leads the front page, so it sits above the holdings/rail row and is divided from them
+   by a hairline rather than boxed — part of the ledger, not a foreign widget. */
+.scorecard {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.scorecard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scorecard-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.scorecard-head .ranked {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.scorecard-body {
+  display: grid;
+  grid-template-columns: 196px 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+/* The dial — a measured semicircular gauge of the position-weighted score, the one
+   bold element. The readout sits in the bowl of the arc. */
+.gauge {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.gauge-svg {
+  width: 196px;
+  height: auto;
+  display: block;
+}
+
+.gauge-track {
+  fill: none;
+  stroke: var(--bar-track);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.gauge-value {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.gauge-tick {
+  stroke: var(--faint);
+  stroke-width: 1.5;
+}
+
+.gauge-dot {
+  stroke: var(--card);
+  stroke-width: 2;
+}
+
+.gauge-readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.gauge-score {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-verdict {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.gauge-scale {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-read {
+  min-width: 0;
+}
+
+.scorecard-lead {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--body);
+}
+
+.scorecard-lead strong {
+  font-weight: 700;
+}
+
+/* The capital split — one proportional bar of YOUR money partitioned by verdict.
+   Same hairline-divided idiom as the theme spine, different meaning. */
+.cap-bar {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: var(--r-inset);
+  overflow: hidden;
+  background: var(--bar-track);
+}
+
+.cap-seg {
+  flex-basis: 0;
+  min-width: 2px;
+  height: 100%;
+}
+
+.cap-seg + .cap-seg {
+  border-left: 1.5px solid var(--card);
+}
+
+.cap-legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 22px;
+}
+
+.cap-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.cap-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cap-meta {
+  font-size: 12.5px;
+  color: var(--muted-2);
+}
+
+.cap-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+/* The two anchors — what carries the book and what drags it, each a button into detail. */
+.scorecard-anchors {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.anchor {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "eyebrow eyebrow"
+    "name score";
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 3px;
+  text-align: left;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: var(--r-inset);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.anchor.up {
+  border-left-color: var(--up-bar);
+}
+
+.anchor.down {
+  border-left-color: var(--down-bar);
+}
+
+.anchor:hover {
+  background: var(--neutral-tint);
+}
+
+.anchor-eyebrow {
+  grid-area: eyebrow;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.anchor-name {
+  grid-area: name;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.anchor-score {
+  grid-area: score;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-foot {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted-2);
+}
+
+@media (max-width: 560px) {
+  .scorecard-body {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    justify-items: center;
+  }
+  .scorecard-read {
+    width: 100%;
+  }
+}
+
 .book-comp {
   grid-column: 1 / -1;
   min-width: 0;
@@ -3353,6 +3624,7 @@ body > #root {
 .detail-back:focus-visible,
 .market-chip:focus-visible,
 .reach-name:focus-visible,
+.anchor:focus-visible,
 .next-move:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

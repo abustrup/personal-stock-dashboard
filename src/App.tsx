@@ -35,11 +35,12 @@ import {
   type StandoutExposure,
 } from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
+import { buildBookScorecard, type BookScorecard as BookScorecardModel, type Stance, type StanceSlice } from "./lib/scorecard";
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
 import { parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
-import { scoreContributions } from "./lib/recommendations";
+import { OWNED_SCORE_THRESHOLDS, scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
 import {
@@ -598,8 +599,12 @@ function PortfolioView({
   // Roll the owned book up into a primary-theme partition — what the money is actually
   // betting on, counted once per holding. The full-width band below the ledger.
   const composition = useMemo(() => buildBookComposition(portfolio), [portfolio]);
+  // The model's single verdict on the whole book — the dial that leads the front page.
+  const scorecard = useMemo(() => buildBookScorecard(portfolio), [portfolio]);
   return (
     <div className="portfolio-grid">
+      {scorecard && <BookScorecard card={scorecard} onSelect={onSelect} />}
+
       <section className="holdings" aria-label="Your holdings">
         <div className="holdings-head">
           <h2>Your holdings</h2>
@@ -688,6 +693,196 @@ function PortfolioView({
       {composition.holdingCount > 0 && <BookComposition composition={composition} />}
     </div>
   );
+}
+
+// The front-page lead synthesis: the model's verdict on your WHOLE book, in one
+// reading. The signature is the dial — a measured semicircular gauge of the
+// position-weighted score, with the model's own verdict cutoffs (42 trim · 56 hold ·
+// 72 increase) ticked onto the arc, so the book's number is read in the same verdict
+// language every holding row uses, and you can see how far the book sits from a better
+// verdict. Beneath it, the capital split: a single proportional bar partitioning YOUR
+// money by what the model would add to, hold, or reduce — the forward editorial a
+// broker's flat positions list never draws over your weights. Pure rollup of the
+// tested model (lib/scorecard), so the picture can't drift from the numbers; the score
+// blends measured and editorial inputs, so the dial is captioned with how much of the
+// book is data-backed rather than overclaiming.
+const STANCE_META: Record<Stance, { label: string; color: string }> = {
+  add: { label: "Add to", color: "var(--up-bar)" },
+  hold: { label: "Hold", color: "var(--neutral-bar)" },
+  reduce: { label: "Reduce", color: "var(--down-bar)" },
+};
+
+// The dial arc reads in the model's verdict language; its colour matches the verdict
+// so the gauge, the label and the per-holding row microbars all speak the same palette.
+const VERDICT_GAUGE: Record<Recommendation["action"], string> = {
+  increase: "var(--up-bar)",
+  hold: "var(--neutral-v)",
+  trim: "var(--down-bar)",
+  avoid: "var(--down)",
+  investigate: "var(--accent)",
+  watch: "var(--neutral-bar)",
+};
+
+const VERDICT_WORD: Record<Recommendation["action"], string> = {
+  increase: "Increase",
+  hold: "Hold",
+  trim: "Trim",
+  avoid: "Avoid",
+  investigate: "Investigate",
+  watch: "Watch",
+};
+
+// Semicircle gauge geometry: a point on the arc for a 0-100 value, sweeping the
+// score from the left end (0) over the top to the right end (100).
+const GAUGE = { cx: 100, cy: 100, r: 84 };
+function gaugePoint(value: number): { x: number; y: number } {
+  const theta = Math.PI * (1 - Math.max(0, Math.min(100, value)) / 100);
+  return { x: GAUGE.cx + GAUGE.r * Math.cos(theta), y: GAUGE.cy - GAUGE.r * Math.sin(theta) };
+}
+// The arc path from value `from` to value `to` along the dial.
+function gaugeArc(from: number, to: number): string {
+  const a = gaugePoint(from);
+  const b = gaugePoint(to);
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${GAUGE.r} ${GAUGE.r} 0 0 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+}
+
+// Round the capital shares so the printed integers still add up to 100 (largest
+// remainder), so the legend never reads 99% or 101% on a partition that really does
+// sum to the whole book. The bar widths use the raw floats; only the labels round.
+function roundedStanceShares(stances: StanceSlice[]): Map<Stance, number> {
+  const live = stances.filter((s) => s.weightPct > 0.05);
+  const total = Math.round(live.reduce((sum, s) => sum + s.weightPct, 0));
+  const parts = live.map((s) => ({ stance: s.stance, floor: Math.floor(s.weightPct), rem: s.weightPct % 1 }));
+  let deficit = total - parts.reduce((sum, p) => sum + p.floor, 0);
+  const result = new Map<Stance, number>(parts.map((p) => [p.stance, p.floor]));
+  for (const p of [...parts].sort((a, b) => b.rem - a.rem)) {
+    if (deficit <= 0) break;
+    result.set(p.stance, (result.get(p.stance) ?? 0) + 1);
+    deficit -= 1;
+  }
+  return result;
+}
+
+function BookScorecard({ card, onSelect }: { card: BookScorecardModel; onSelect: (symbol: string) => void }) {
+  const { weightedScore, verdict, toNextTier, stances, measuredShare, best, worst, count } = card;
+  const arcColor = VERDICT_GAUGE[verdict];
+  const dot = gaugePoint(weightedScore);
+  const measuredPct = Math.round(measuredShare * 100);
+  // Capital stances that actually carry weight — the bar and legend skip empty ones.
+  const liveStances = stances.filter((s) => s.weightPct > 0.05);
+  // Integer shares that sum to exactly 100 for the labels (bar widths stay exact).
+  const shares = roundedStanceShares(stances);
+  // A single-holding book is both its own anchor and its own drag — show one card.
+  const splitAnchors = best.company.symbol !== worst.company.symbol;
+
+  return (
+    <section className="scorecard" aria-label="The model's verdict on your book">
+      <div className="scorecard-head">
+        <h2>The model&apos;s read on your book</h2>
+        <span className="ranked">Position-weighted · {count} {count === 1 ? "holding" : "holdings"}</span>
+      </div>
+
+      <div className="scorecard-body">
+        <div className="gauge" role="img" aria-label={`Your book scores ${weightedScore} out of 100, in ${VERDICT_WORD[verdict]} range.`}>
+          <svg viewBox="0 0 200 116" className="gauge-svg" aria-hidden="true">
+            <path className="gauge-track" d={gaugeArc(0, 100)} />
+            <path className="gauge-value" d={gaugeArc(0, weightedScore)} style={{ stroke: arcColor }} />
+            {/* The model's own verdict cutoffs, ticked onto the arc — read from the shared
+                thresholds so the ticks can never drift from the verdict logic. */}
+            {[OWNED_SCORE_THRESHOLDS.trim, OWNED_SCORE_THRESHOLDS.hold, OWNED_SCORE_THRESHOLDS.increase].map((tick) => {
+              const inner = gaugePoint(tick);
+              const outer = {
+                x: GAUGE.cx + (GAUGE.r + 7) * Math.cos(Math.PI * (1 - tick / 100)),
+                y: GAUGE.cy - (GAUGE.r + 7) * Math.sin(Math.PI * (1 - tick / 100)),
+              };
+              return (
+                <line
+                  key={tick}
+                  className="gauge-tick"
+                  x1={inner.x.toFixed(2)}
+                  y1={inner.y.toFixed(2)}
+                  x2={outer.x.toFixed(2)}
+                  y2={outer.y.toFixed(2)}
+                />
+              );
+            })}
+            <circle className="gauge-dot" cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r={5} style={{ fill: arcColor }} />
+          </svg>
+          <div className="gauge-readout">
+            <span className="gauge-score" style={{ color: arcColor }}>{weightedScore}</span>
+            <span className="gauge-verdict" style={{ color: arcColor }}>{VERDICT_WORD[verdict]} range</span>
+            <span className="gauge-scale" aria-hidden="true">/ 100</span>
+          </div>
+        </div>
+
+        <div className="scorecard-read">
+          <p className="scorecard-lead">
+            Weighted by position size, your book reads{" "}
+            <strong style={{ color: arcColor }}>{VERDICT_WORD[verdict].toLowerCase()}</strong>
+            {toNextTier
+              ? ` — ${toNextTier.points} ${toNextTier.points === 1 ? "point" : "points"} below where the model starts saying ${VERDICT_WORD[toNextTier.action].toLowerCase()}.`
+              : " — the strongest verdict the model gives an owned name."}
+          </p>
+
+          <div className="cap-bar" role="img" aria-label={capitalLabel(card)}>
+            {liveStances.map((slice) => (
+              <span
+                key={slice.stance}
+                className="cap-seg"
+                style={{ flexGrow: Math.max(slice.weightPct, 0.001), background: STANCE_META[slice.stance].color }}
+                title={`${STANCE_META[slice.stance].label} · ${shares.get(slice.stance) ?? 0}% of your money`}
+              />
+            ))}
+          </div>
+
+          <ul className="cap-legend">
+            {liveStances.map((slice) => (
+              <li key={slice.stance} className="cap-row">
+                <span className="cap-swatch" style={{ background: STANCE_META[slice.stance].color }} aria-hidden="true" />
+                <span className="cap-label">{STANCE_META[slice.stance].label}</span>
+                <span className="cap-meta">
+                  {slice.holdings} {slice.holdings === 1 ? "name" : "names"}
+                </span>
+                <span className="cap-pct">{shares.get(slice.stance) ?? 0}%</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="scorecard-anchors">
+            <button type="button" className="anchor up" onClick={() => onSelect(best.company.symbol)}>
+              <span className="anchor-eyebrow">{splitAnchors ? "Carries the book" : "Your only holding"}</span>
+              <span className="anchor-name">{best.company.name}</span>
+              <span className="anchor-score">{best.score}</span>
+            </button>
+            {splitAnchors && (
+              <button type="button" className="anchor down" onClick={() => onSelect(worst.company.symbol)}>
+                <span className="anchor-eyebrow">Drags it down</span>
+                <span className="anchor-name">{worst.company.name}</span>
+                <span className="anchor-score">{worst.score}</span>
+              </button>
+            )}
+          </div>
+
+          <p className="scorecard-foot">
+            {measuredPct >= 50
+              ? `${measuredPct}% of your book has measured market data behind its score; the rest is editorial estimates.`
+              : `Only ${measuredPct}% of your book has measured market data behind its score — run npm run refresh to score it on live momentum & fundamentals.`}{" "}
+            The verdict is the model&apos;s, not your broker&apos;s.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// The plain-text reading of the capital split, for the bar's accessible label. Uses
+// the same integer shares (summing to 100) the legend prints, so the two never disagree.
+function capitalLabel(card: BookScorecardModel): string {
+  const shares = roundedStanceShares(card.stances);
+  const parts = card.stances
+    .filter((s) => s.weightPct > 0.05)
+    .map((s) => `${shares.get(s.stance) ?? 0}% to ${STANCE_META[s.stance].label.toLowerCase()}`);
+  return `Your money by verdict: ${parts.join(", ")}.`;
 }
 
 // Restrained ramp for the composition slices: the lead slice takes the ledger's accent
