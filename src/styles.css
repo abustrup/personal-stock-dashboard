@@ -3502,6 +3502,77 @@ body > #root {
   background: var(--neutral-tint);
 }
 
+/* ---------- deep-dive: external research links ---------- */
+.deepdive {
+  display: grid;
+  gap: 9px;
+}
+.deepdive-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+}
+.deepdive-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.deepdive-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 220px;
+  padding: 11px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-inset);
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+.deepdive-link svg {
+  margin-left: auto;
+  color: var(--faint);
+  flex-shrink: 0;
+  transition: color 0.14s ease, transform 0.14s ease;
+}
+.deepdive-link:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.deepdive-link:hover svg {
+  color: var(--accent);
+  transform: translate(1px, -1px);
+}
+.deepdive-link-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.deepdive-link-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.deepdive-link-detail {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.deepdive-link:hover .deepdive-link-detail {
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .deepdive-link,
+  .deepdive-link svg {
+    transition: none;
+  }
+  .deepdive-link:hover svg {
+    transform: none;
+  }
+}
+
 /* ---------- compliance block ---------- */
 .compliance {
   display: flex;
@@ -3897,6 +3968,7 @@ body > #root {
 .market-chip:focus-visible,
 .reach-name:focus-visible,
 .anchor:focus-visible,
+.deepdive-link:focus-visible,
 .next-move:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

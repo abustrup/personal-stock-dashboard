@@ -77,6 +77,7 @@ import {
 import { loadBrokerSettings, saveBrokerSettings } from "./lib/brokerSettings";
 import { bookPctLabel, describePlan, planHeadline, planPosition, type PositionPlan } from "./lib/positionPlan";
 import { searchDirectory, type DirectoryEntry } from "./lib/companyDirectory";
+import { researchLinks } from "./lib/externalResearch";
 import {
   addWatchEntry,
   loadWatchlist,
@@ -3017,6 +3018,8 @@ function CompanyDetail({
         </article>
       )}
 
+      <DeepDiveLinks company={company} />
+
       {peers && peers.count > 1 && <ThemePeers comparison={peers} onSelect={onSelect} />}
 
       {context && holding && (
@@ -3303,6 +3306,40 @@ function RangeBar({ low, high, price, currency }: { low: number; high: number; p
         </div>
       </div>
       <span className="range-end">{formatPrice(high)}</span>
+    </div>
+  );
+}
+
+// The "go deeper" exit: external links to the full chart, news and financials the
+// dashboard doesn't try to re-render. The product keeps the verdict (score, EIFO,
+// the buy plan); this hands off to the source for the whole story — and it's the
+// only way to research a name your broker hides outright (Saxo can't show you a
+// Korea Exchange listing at all). Every link is one we're confident resolves
+// (see lib/externalResearch); a name with nothing safe to link to renders nothing.
+function DeepDiveLinks({ company }: { company: Company }) {
+  const links = useMemo(() => researchLinks(company), [company]);
+  if (links.length === 0) return null;
+  return (
+    <div className="deepdive" aria-label={`Research ${company.name} on an external site`}>
+      <span className="deepdive-eyebrow">Go deeper · opens a new tab</span>
+      <div className="deepdive-links">
+        {links.map((link) => (
+          <a
+            key={link.provider}
+            className="deepdive-link"
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${link.label} — ${link.detail} (opens in a new tab)`}
+          >
+            <span className="deepdive-link-text">
+              <span className="deepdive-link-name">{link.label}</span>
+              <span className="deepdive-link-detail">{link.detail}</span>
+            </span>
+            <ArrowUpRight aria-hidden="true" size={14} />
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
