@@ -113,12 +113,6 @@ body > #root {
   padding: 28px 24px 44px;
 }
 
-/* horizontal padding shared by every chrome + view band */
-.pad {
-  padding-left: 32px;
-  padding-right: 32px;
-}
-
 .view {
   animation: ledger-fade 0.16s ease;
 }
@@ -2206,15 +2200,6 @@ body > #root {
   font-size: 11.5px;
   font-weight: 600;
 }
-.next-move-foot {
-  margin: 0;
-  padding: 9px 16px 11px;
-  border-top: 1px solid var(--row-line);
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--muted);
-  background: var(--inset);
-}
 @media (max-width: 640px) {
   .next-move {
     grid-template-columns: 22px minmax(0, 1fr) auto;
@@ -4061,17 +4046,9 @@ body > #root {
 .next-move:focus-visible {
   outline-offset: -2px;
 }
-.map-dot:focus {
-  outline: none;
-}
-.map-dot:focus-visible .map-mark {
-  stroke: var(--accent);
-  stroke-width: 2.5;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .view,
-  .map-mark,
   .ring-arc,
   .live-dot,
   .reach-seg,
@@ -4100,7 +4077,6 @@ body > #root {
   .hero {
     grid-template-columns: 1fr;
   }
-  .pad,
   .topbar,
   .hero,
   .tabs,
