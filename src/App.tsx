@@ -21,7 +21,7 @@ import { parsePortfolioCsv } from "./lib/portfolio";
 import { scoreContributions } from "./lib/recommendations";
 import { mergeExternalSignals, type ExternalSignalSnapshot } from "./lib/signals";
 import { clearPortfolio, loadPortfolio, savePortfolio } from "./lib/storage";
-import type { Company, ComplianceStatus, Holding, MarketSnapshot, Recommendation } from "./lib/types";
+import type { Company, ComplianceStatus, Holding, Recommendation } from "./lib/types";
 
 type View = "portfolio" | "opportunities" | "detail";
 

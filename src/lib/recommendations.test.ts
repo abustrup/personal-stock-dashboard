@@ -33,7 +33,7 @@ const baseCompany = {
 
 describe("recommendCompany", () => {
   it("uses holding labels for owned positions", () => {
-    const result = recommendCompany(baseCompany, { owned: true, weight: 13.3 });
+    const result = recommendCompany(baseCompany, { owned: true });
 
     expect(["increase", "hold", "trim", "avoid"]).toContain(result.action);
     expect(result.downside).toMatch(/valuation|demand|margin|competition/i);

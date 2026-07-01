@@ -12,7 +12,6 @@ import type {
 
 type HoldingContext = {
   owned?: boolean;
-  weight?: number;
 };
 
 export function recommendCompany(

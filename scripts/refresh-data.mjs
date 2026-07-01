@@ -94,7 +94,7 @@ async function fetchYahooMarket(symbol) {
   url.searchParams.set("interval", "1d");
 
   try {
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const response = await fetch(url, { headers: { "User-Agent": UA } });
     if (!response.ok) {
       console.warn(`Yahoo price fetch for ${symbol} returned HTTP ${response.status}.`);
       return undefined;
