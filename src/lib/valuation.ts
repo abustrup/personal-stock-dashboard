@@ -72,6 +72,35 @@ export function isHoldingLive(
 }
 
 /**
+ * The live all-time return % for a single holding, re-priced from its market
+ * snapshot — or undefined when the holding is not live, so the caller falls back to
+ * the broker's frozen figure. Uses the EXACT cost basis valuePortfolio sums
+ * (costBasisDkk, else marketValueDkk − totalGainDkk) and the SAME isHoldingLive gate,
+ * so the ledger TOTAL column and the headline liveReturnPct reconcile by construction:
+ * the cost-basis-weighted mean of these per-row returns IS the headline's live return.
+ * Returns undefined on a non-positive basis so a degenerate import can't produce a
+ * wild percentage — the row falls back to the broker's own totalReturnPct instead.
+ */
+export function liveHoldingReturnPct(
+  holding: {
+    currency: string;
+    marketValueDkk: number;
+    currentPrice: number;
+    costBasisDkk?: number;
+    totalGainDkk?: number;
+  },
+  market: { price: number; currency: string } | undefined,
+): number | undefined {
+  if (!isHoldingLive(holding, market) || market === undefined) return undefined;
+  const factor = importFxFactor(holding);
+  if (factor === undefined) return undefined;
+  const basis = holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+  if (!(basis > 0)) return undefined;
+  const value = market.price * factor;
+  return ((value - basis) / basis) * 100;
+}
+
+/**
  * Re-price a portfolio from live market snapshots. Pure: takes the dashboard's
  * portfolio recommendations (each carrying its holding + enriched company.market)
  * and returns the live headline figures plus an honest coverage report.

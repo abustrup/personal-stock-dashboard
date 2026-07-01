@@ -667,6 +667,47 @@ describe("App", () => {
     expect(googl.querySelector(".lt-today")?.textContent).toBe("+0.80%");
   });
 
+  it("shows a live holding's TOTAL re-priced from the snapshot, not the broker's frozen % Total afkast", async () => {
+    // The headline NAV all-time return re-prices every live holding (valuation.ts
+    // liveReturnPct). The ledger TOTAL column must agree: a live holding's row shows
+    // that same re-priced return, not the broker's frozen "% Total afkast" captured at
+    // import — otherwise a row sits red under a headline the live price pushed green.
+    // NVDA is priced (live: USD snapshot). Its import price is 198, marketValueDkk
+    // 27324 → factor 138; cost basis 20700. A snapshot at 210 → value 28980 →
+    // (28980−20700)/20700 = +40.00%, distinct from the broker's frozen +32.00%.
+    const snapshot = {
+      generatedAt: new Date().toISOString(),
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: {
+          symbol: "NVDA",
+          price: 210,
+          currency: "USD",
+          previousClose: 205,
+          dayChangePct: 2.44,
+          momentum: 61,
+          asOf: "2026-06-28T18:49:41.386Z",
+        },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    // NVIDIA is live → its TOTAL cell shows the re-priced +40.00%, NOT the frozen +32.00%.
+    const nvda = await screen.findByRole("button", { name: /NVIDIA Corp\..*open detail/i });
+    await waitFor(() => {
+      expect(nvda.querySelector(".lt-total")?.textContent).toBe("+40.00%");
+    });
+    expect(nvda.querySelector(".lt-total")?.textContent).not.toContain("32.00");
+
+    // Alphabet has no snapshot → not live → its TOTAL falls back to the broker's frozen
+    // % Total afkast (+16.67% in the demo CSV), exactly as the headline counts it.
+    const googl = screen.getByRole("button", { name: /Alphabet Inc\..*open detail/i });
+    expect(googl.querySelector(".lt-total")?.textContent).toBe("+16.67%");
+  });
+
   it("stops claiming LIVE and names the age when the snapshot is stale", async () => {
     const snapshot = {
       // Refreshed three days ago: real Yahoo prices, but no longer current.
