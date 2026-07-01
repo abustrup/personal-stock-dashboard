@@ -51,6 +51,54 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-01 — live ledger TOTAL column (self-directed run #9)
+- **Assessment:** Fresh isolated worktree (`~/Documents/psd-run8`, pushed early per the concurrency
+  hazards below), real `npm run refresh` = 41/41 priced. On arrival I found an ALIVE sibling (run #8):
+  PR #44 (ledger TODAY reconciliation) had been open ~2 min with CI green ~90s — I did NOT race it,
+  verified it in isolation (326 tests + build green; an independent reviewer subagent, anchored to its
+  exact HEAD, returned SHIP), and let the sibling's own flow squash-merge it (landed as #44, main → 1603a51).
+  Merging is idempotent/collision-safe; pushing a *competing* branch is the documented failure mode, so I
+  waited it out rather than interfere. Then assessed FRESH main for a DISTINCT move. Finding: run #4 made the
+  headline all-time return LIVE (`liveReturnPct`) and run #8 reconciled the ledger TODAY column, but the
+  ledger **TOTAL** column still showed the broker's frozen "% Total afkast" (`holding.totalReturnPct`) — the
+  SAME same-screen honesty contradiction one column over, and exactly run #4's standing P3 roadmap item.
+  Proven visibly on real data, not theoretical: headline reads **+15.98%** while the cost-basis-weighted rows
+  imply **+12.42%** (a 3.56pp gap), and demo **Tesla is a sign flip** — the row shows a red frozen **−6.50%**
+  under a headline the live price (374→420.6 since import) pushed green (**+5.15%** live). Same tipping-point
+  class runs #3/#6/#8 shipped. Runner-up declined: ship-nothing (a real contender — the app is mature — but
+  this is a currently-visible value-#1 contradiction on the ledger, so it clears the bar). App.tsx-monolith
+  refactor: perennially declined (internal-only, coherence #3 < trust #1, destabilising).
+- **Move:** deepen (trust-first). Added pure `liveHoldingReturnPct(holding, market)` to `valuation.ts`:
+  the live all-time return re-priced from the snapshot, or `undefined` when not live — using the EXACT cost
+  basis `valuePortfolio` sums (`costBasisDkk ?? marketValueDkk − totalGainDkk`) and the SAME `isHoldingLive`
+  gate run #8 extracted, so the cost-basis-weighted mean of the per-row live returns **is** the headline
+  `liveReturnPct` by construction (pinned by a no-drift unit test). `LedgerRow` TOTAL now shows the live
+  figure for a live holding, else falls back to the broker's frozen `totalReturnPct` — mirroring the TODAY
+  column exactly. Both are MEASURED (Yahoo price vs broker "% Total afkast"): a source-precedence change,
+  never a MEASURED→EDITORIAL relabel. `totalReturnPct`/`costBasisDkk`/`totalGainDkk` all come straight from
+  the broker CSV (`portfolio.ts`), so uncovered rows and the headline both use the broker's own frozen
+  figures — consistent source, only broker-rounding noise in the identity (same reconciliation quality as
+  #8). Guard: `undefined` on a non-positive basis so a degenerate import falls back rather than showing a
+  wild %. Pure/presentational — no scoring/valuation math touched; bundle flat (325.44 kB, +0.19 kB).
+  +5 valuation tests (unit + basis-derivation + no-drift reconciliation invariant) + 1 App integration test
+  (real `<App>` + seed CSV + stubbed snapshot: NVDA `.lt-total` → **+40.00%** live, NOT +32.00% frozen;
+  GOOGL → +16.67% frozen fallback). 332 tests + build green.
+  *Verification note:* the preview MCP was again bound to a sibling's server (tried a worktree-local
+  launch.json on 5174; the MCP insisted on another chat's port 5180) — the run #4/#6 constraint. Authoritative
+  proof is therefore the rendered-DOM integration test (real App render, real data) + the numeric divergence
+  on the live refreshed snapshot, not a screenshot. Did NOT force the preview binding (run #7 wrong-tree hazard).
+- **Result:** independent skeptical reviewer verdict **SHIP** (strictly better, no regression; it re-ran the
+  suite green, checked the reconciliation algebra byte-for-byte against `valuePortfolio`, walked every
+  LedgerRow case, and confirmed the remaining "from Saxo"-attributed frozen figures introduce no same-screen
+  contradiction). Shipped — **#45** (squash-merged to main; auto-deploys to GitHub Pages).
+  *Carry-forward:* the ledger now reconciles with the headline on BOTH TOTAL and TODAY. The Company DETAIL
+  (`total · from Saxo`) and Compare views still show the broker's frozen total — honest because it is
+  **explicitly attributed** "from Saxo" (the differentiate-from-broker guardrail), on their own screens, not
+  a same-screen contradiction with the headline. A future run could surface the live return there too for
+  full cross-surface coherence (like the freshness-vocabulary carry-forward). Weight recomputation (run #4 P3)
+  still deferred — it touches allocation/scorecard (bigger blast radius) and a partial recompute would create a
+  new row-vs-band split; do it as its own coherent run, not bundled.
+
 ### 2026-07-01 — reconcile the ledger "TODAY" with the live headline (self-directed run #8)
 - **Assessment:** Drove the LIVE app end-to-end across all five surfaces in an isolated worktree
   (`~/Documents/psd-run8`, fresh `npm run refresh` = 41/41 priced + fundamentals; the preview MCP
