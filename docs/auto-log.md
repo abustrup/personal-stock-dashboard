@@ -118,7 +118,7 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   **SHIP**, no must-fix (it proved the App test non-vacuous by flipping the precedence back → failure,
   and noted the single-daily-close `dayChangePct`-undefined edge is *pre-existing on `main`*, not
   introduced here). Fixed one cosmetic nit the reviewer flagged (a stray double blank line in
-  `valuation.test.ts`). Shipped — PR #__PR__.
+  `valuation.test.ts`). Shipped — PR #44.
   *Carry-forward:* every "today" in the app now shares one source (live Yahoo `dayChangePct`, broker
   fallback) via the shared `isHoldingLive` predicate; don't re-split it (see the new standing note).
   The freshness-vocabulary unification (header chip / NAV caption / "since last refresh") remains an
