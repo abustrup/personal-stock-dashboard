@@ -49,7 +49,72 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   never headlined. **Don't** re-add broker `% 1D afk.` to the live ledger TODAY column. The broker `dayReturnPct` field
   stays in `types.ts`/`portfolio.ts` (it still drives the import-only fallback and the headline's uncovered blend).
 
+- **Don't "label the Concentration rail-brief from-import" — it REGRESSES coherence (run #11 rejected it).** A future
+  trust lens will be tempted to append "· from your import" to the Concentration rail-brief note (App.tsx ~914-921,
+  "24% in NVIDIA / top three 60%") because it reads as bare present-tense fact over frozen `portfolioWeight`. Run #11's
+  panel proposed exactly this, then disproved its own premise against the code: Concentration is **not** the only
+  unlabeled frozen-weight surface — the ledger WEIGHT column (App.tsx:868 header, :1397 cell), Opportunities exposure
+  and the Map are all equally unlabeled and use the same frozen `portfolioWeight`. The three surfaces that *do* say
+  "measured from your import" (theme composition App.tsx:1282-1283, position slots :1016, theme peers :2193) carry it to
+  mark a **MEASURED-weights vs EDITORIAL-themes boundary** ("the themes are an editorial classification"), NOT to
+  disclose the freeze. Concentration makes no editorial claim, so labeling only it makes the frozen-weight treatment
+  *more* uneven and adds the sole provenance-tagged rail-brief — a coherence (#3) regression to paper over a non-lie
+  (unlabeled frozen weight shown *as* a weight is honestly-sourced MEASURED data, not a mislabel; no on-screen number
+  contradicts it). The honest resolution is run #4's **P3: recompute weights LIVE** so they reconcile with the now-live
+  NAV — one coherent, higher-blast-radius run touching all ~7 weight surfaces + allocation/scorecard together, not a
+  per-card label. Do P3 whole, or leave the weights consistently import-frozen; don't patch one card.
+
 ## Runs (most recent first)
+
+### 2026-07-01 — ship nothing, deliberately (self-directed run #11)
+- **Assessment:** Fresh isolated worktree (`~/Documents/psd-run11`, `node_modules` symlinked, pushed early per the
+  concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals. No open PRs, no live sibling (deleted the
+  stale merged `auto/assess-run10` local branch first). Drove the LIVE app end-to-end across all five surfaces. The
+  preview MCP was again captured by the *main* checkout's dev server on 5180 (the documented run #4/#6/#8/#9/#10 binding
+  hazard) — I confirmed via `lsof` that 5180's cwd is the main checkout at HEAD `106804c` (== my base, NOT a divergent
+  branch, per the run #7 wrong-tree check), synced my fresh gitignored `live-signals.json` into it so I assessed the true
+  LIVE 16:09 state, and did not force the binding. The app is mature and honest: Portfolio (live NAV + reconciled ledger
+  TODAY/TOTAL), Opportunities (budget/EIFO-aware, nothing silently dropped — "11 of 14 buyable … the rest named, not
+  dropped"), Map (score×risk four-zone), Compare (per-axis MEASURED/EDITORIAL + MODEL'S PICK, NVDA "+30.43% total"
+  reconciled with the ledger per run #10), Company (Data/Price/Editorial header, annotated chart, EIFO "cannot be called
+  clean", the deliberately-frozen "FROM SAXO" strip) all remain genuinely distinct — don't consolidate. Console clean,
+  mobile topbar clean at 375px (run #7 holds). Judged **trust-first**, I chased two candidate gaps and **both dissolved
+  on inspection, not into a fix:** (a) the "SINCE THE LAST REFRESH · 14:25" band vs the header's "16:09" chip is NOT a
+  contradiction — the band's timestamp is the localStorage diff-baseline (the last snapshot the reader saw; `storage.ts`
+  `ModelSnapshot.asOf`), the header is the current snapshot; two legitimately-different times, a mild freshness-vocabulary
+  nicety at most. (b) The ledger/Concentration/theme/map **weights are import-frozen** (`portfolioWeight`) while
+  TODAY/TOTAL are live — but the app **explicitly labels** them "measured from your import" / "Measured DKK only, no FX"
+  on the theme + position surfaces, so weight provenance is *disclosed*, not a lie.
+- **Move:** **do-nothing (ship nothing).** To counter my own anchoring after 10 straight live-reconciliation runs, I ran
+  the routine's anti-anchoring decision panel as an ultracode workflow — 4 distinct lenses (trust / decisiveness /
+  coherence-cold-read / a dedicated ship-nothing advocate) + a synthesizer, each anchored to this worktree's exact HEAD
+  `106804c` and required to cite `file:line`. Verdict: **SHIP NOTHING, high confidence** (the coherence lens errored on a
+  schema retry cap, but the other three + synthesis carried it). Only the trust lens proposed a change — append
+  "· from your import" to the Concentration rail-brief — and marked it clearsBar; the synthesizer **disproved its
+  premise against the code** (I re-verified independently): Concentration is *not* the only unlabeled frozen-weight
+  surface (the ledger WEIGHT column at App.tsx:868/:1397, Opportunities exposure, and the Map are all equally unlabeled),
+  and the "measured from your import" labels elsewhere mark a MEASURED-vs-EDITORIAL-theme boundary Concentration doesn't
+  share — so labeling only that one card makes the frozen-weight treatment *more* uneven and adds the sole
+  provenance-tagged rail-brief, a coherence (#3) regression to paper over a non-lie. Unlabeled frozen weight shown *as* a
+  weight is honestly-sourced MEASURED data; no on-screen number contradicts it, so §1 (trust) is not breached — unlike
+  every prior tipping-point ship (#3/#6/#8/#9/#10), which each fixed an *active* same-screen contradiction. Runner-ups
+  rejected: the decisiveness lens's rail-triage reorder (its own author set clearsBar:false — the BookScorecard already
+  carries the decisive load, and emphasis-by-urgency risks a false-urgency trust regression + a jumpy surface between
+  refreshes); the App.tsx-monolith refactor (perennially declined). The genuinely honest weight resolution is run #4's
+  **P3 (live-repriced weights reconciling with the live NAV)** — one coherent higher-blast-radius run across all ~7
+  weight surfaces + allocation/scorecard, correctly deferred by runs #9/#10; a partial per-card label is a fragment of
+  it, not a clean win. A regressing change is worse than no change, and velocity is not a value (Charter).
+- **Result:** **Shipped nothing** — no product change cleared "strictly better, no regression." Per the routine ("a
+  fresh entry is appended at the end of every run, including ship-nothing runs"), the only deliverable is this journal
+  entry + the new standing "don't retry" note above (so a future trust lens doesn't re-propose the Concentration label),
+  shipped as a docs-only PR. **PR #_pending — appended on merge._** No app code, tests, or bundle touched (333 tests +
+  build were green on arrival and untouched).
+  *Carry-forward:* the live-price reconciliation theme is **complete** (headline NAV, ledger TODAY/TOTAL, Compare all
+  reconcile; the Company "FROM SAXO" strip stays deliberately frozen). The next real trust move is P3 (live weights),
+  done whole; until then the weights are *consistently* import-frozen and honestly labeled where a
+  measured-vs-editorial boundary is drawn — leave them be. Freshness-vocabulary unification and the App.tsx-monolith
+  refactor remain correctly deferred. When the honest assessment is "the app is strong and no change clears the bar,"
+  ship-nothing IS the run — don't manufacture a diff.
 
 ### 2026-07-01 — live Compare-card TOTAL (self-directed run #10)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run10`, `node_modules` symlinked, pushed
