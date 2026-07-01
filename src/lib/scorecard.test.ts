@@ -110,9 +110,10 @@ describe("buildBookScorecard", () => {
       owned({ symbol: "TRIM", action: "trim", weight: 15 }),
       owned({ symbol: "AVOID", action: "avoid", weight: 5 }),
     ])!;
-    expect(card.addWeightPct).toBeCloseTo(50);
-    expect(card.holdWeightPct).toBeCloseTo(30);
-    expect(card.reduceWeightPct).toBeCloseTo(20); // trim + avoid
+    const stanceWeight = (stance: string) => card.stances.find((s) => s.stance === stance)!.weightPct;
+    expect(stanceWeight("add")).toBeCloseTo(50);
+    expect(stanceWeight("hold")).toBeCloseTo(30);
+    expect(stanceWeight("reduce")).toBeCloseTo(20); // trim + avoid
     expect(card.stances.map((s) => s.stance)).toEqual(["add", "hold", "reduce"]);
     const reduce = card.stances.find((s) => s.stance === "reduce")!;
     expect(reduce.holdings).toBe(2);
@@ -127,8 +128,9 @@ describe("buildBookScorecard", () => {
       owned({ symbol: "B", score: 40, weight: 0, action: "trim" }),
     ])!;
     expect(card.weightedScore).toBe(60); // equal weights → simple average
-    expect(card.addWeightPct).toBeCloseTo(50);
-    expect(card.reduceWeightPct).toBeCloseTo(50);
+    const stanceWeight = (stance: string) => card.stances.find((s) => s.stance === stance)!.weightPct;
+    expect(stanceWeight("add")).toBeCloseTo(50);
+    expect(stanceWeight("reduce")).toBeCloseTo(50);
   });
 
   it("identifies the book's best and worst holdings by score", () => {

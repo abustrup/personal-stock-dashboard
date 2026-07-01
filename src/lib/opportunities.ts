@@ -189,7 +189,13 @@ export function buildOpportunityOverview(
   // so honestly. The same picker feeds the front-page rail, so the two agree.
   const { standout, standoutSkipped } = pickActionableStandout(opportunities, investableSymbols);
   const standoutTheme = standout?.company.themes[0];
-  const standoutExposure = standoutTheme ? themeExposure(portfolio, standoutTheme) : undefined;
+  // Reuse the exposure map built above rather than re-scanning the whole book for
+  // one theme; exposureFor and themeExposure compute the identical numbers.
+  let standoutExposure: StandoutExposure | undefined;
+  if (standoutTheme) {
+    const { ownedCount, ownedWeightPct } = exposureFor(standoutTheme);
+    standoutExposure = { theme: standoutTheme, ownedCount, ownedWeightPct, isGap: ownedCount === 0 };
+  }
 
   const gapCount = groups.filter((g) => g.isGap).reduce((sum, g) => sum + g.opportunities.length, 0);
 

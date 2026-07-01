@@ -1,3 +1,4 @@
+import { formatWholeNumber } from "./format";
 import type { Company, Recommendation } from "./types";
 
 /**
@@ -159,8 +160,6 @@ export type Investability = {
   note: string;
 };
 
-const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-
 /**
  * Assess one company against the broker settings. Pure and synchronous: tradability
  * is a string-set check on the exchange; affordability converts the measured share
@@ -206,7 +205,7 @@ export function assessInvestability(company: Company, settings: BrokerSettings):
       exchange,
       fxApprox,
       reason: "1 share > budget",
-      note: `One share ≈ DKK ${DKK.format(sharePriceDkk!)}${fxApprox ? " (approx)" : ""} — above your DKK ${DKK.format(budgetDkk)} per-trade budget. A single share already overshoots your sizing.`,
+      note: `One share ≈ DKK ${formatWholeNumber(sharePriceDkk!)}${fxApprox ? " (approx)" : ""} — above your DKK ${formatWholeNumber(budgetDkk)} per-trade budget. A single share already overshoots your sizing.`,
     };
   }
 
@@ -219,7 +218,7 @@ export function assessInvestability(company: Company, settings: BrokerSettings):
       budgetDkk,
       exchange,
       fxApprox,
-      note: `One share ≈ DKK ${DKK.format(sharePriceDkk!)}${fxApprox ? " (approx)" : ""} — fits inside your DKK ${DKK.format(budgetDkk)} per-trade budget.`,
+      note: `One share ≈ DKK ${formatWholeNumber(sharePriceDkk!)}${fxApprox ? " (approx)" : ""} — fits inside your DKK ${formatWholeNumber(budgetDkk)} per-trade budget.`,
     };
   }
 
@@ -231,7 +230,7 @@ export function assessInvestability(company: Company, settings: BrokerSettings):
     budgetDkk,
     exchange,
     fxApprox: false,
-    note: `On a tradable market, but no live price yet — run a refresh to size one share against your DKK ${DKK.format(budgetDkk)} budget.`,
+    note: `On a tradable market, but no live price yet — run a refresh to size one share against your DKK ${formatWholeNumber(budgetDkk)} budget.`,
   };
 }
 

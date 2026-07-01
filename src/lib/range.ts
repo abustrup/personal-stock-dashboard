@@ -1,3 +1,5 @@
+import { clamp01 } from "./market";
+import { isFiniteNumber } from "./number";
 import type { MarketSnapshot } from "./types";
 
 // Where a name's latest price sits inside its measured 52-week range. This is
@@ -27,16 +29,6 @@ export type RangeRead = {
   price: number;
   currency: string;
 };
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function clamp01(value: number): number {
-  if (value < 0) return 0;
-  if (value > 1) return 1;
-  return value;
-}
 
 // The 52-week position 0..1, preferring the canonical `rangePosition` and falling
 // back to deriving it from price and the 52-week high/low. Undefined when there is

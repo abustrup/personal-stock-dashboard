@@ -1,4 +1,5 @@
 import { evaluateCompliance, type ComplianceOverrides } from "./compliance";
+import { clampPct } from "./number";
 import { dataFreshness } from "./signals";
 import type {
   Company,
@@ -112,7 +113,7 @@ export function scoreContributions(
 
 function calculateScore(company: Company, complianceStatus: ComplianceStatus): number {
   const total = scoreContributions(company, complianceStatus).reduce((sum, c) => sum + c.points, 0);
-  return clamp(total + SCORE_BASE);
+  return clampPct(total + SCORE_BASE);
 }
 
 /**
@@ -245,8 +246,4 @@ function directionScore(direction: SignalDirection): number {
   if (direction === "positive") return 72;
   if (direction === "negative") return 28;
   return 50;
-}
-
-function clamp(value: number): number {
-  return Math.max(0, Math.min(100, value));
 }

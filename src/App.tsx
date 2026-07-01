@@ -37,6 +37,8 @@ import {
   type MapQuadrant,
 } from "./lib/map";
 import { mergeMarketSnapshot, type MarketSnapshotMap } from "./lib/market";
+import { formatWholeNumber } from "./lib/format";
+import { clampPct } from "./lib/number";
 import { buildComparison, type Comparison, type Side } from "./lib/compare";
 import {
   buildOpportunityOverview,
@@ -1664,9 +1666,6 @@ function trailingMonthLabels(): [string, string] {
   return [fmt(start), fmt(now)];
 }
 
-function clampPct(value: number): number {
-  return Math.max(0, Math.min(100, value));
-}
 
 function shortName(name: string): string {
   return name.split(/\s+/)[0];
@@ -3628,11 +3627,11 @@ function riskFactorProvenance(riskFactor: RiskFactor, fundamentalsMeasured: bool
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  return formatWholeNumber(value);
 }
 
 function formatSigned(value: number): string {
-  const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.abs(value));
+  const formatted = formatWholeNumber(Math.abs(value));
   return `${value < 0 ? "−" : "+"}${formatted}`;
 }
 

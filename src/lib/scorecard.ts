@@ -44,10 +44,6 @@ export type BookScorecard = {
   toNextTier?: { action: RecommendationAction; points: number };
   /** Always three slices (add, hold, reduce) in that order; weightPct sums to ~100. */
   stances: StanceSlice[];
-  /** Share of the book's weight the model would add to / hold / reduce (percent numbers). */
-  addWeightPct: number;
-  holdWeightPct: number;
-  reduceWeightPct: number;
   /** Highest- and lowest-scoring owned holdings — the book's anchor and its drag. */
   best: Recommendation;
   worst: Recommendation;
@@ -125,9 +121,6 @@ export function buildBookScorecard(portfolio: Recommendation[]): BookScorecard |
     verdict,
     toNextTier: nextTier(weightedScore),
     stances,
-    addWeightPct: (stanceWeight.add / totalWeight) * 100,
-    holdWeightPct: (stanceWeight.hold / totalWeight) * 100,
-    reduceWeightPct: (stanceWeight.reduce / totalWeight) * 100,
     best: byScore[0],
     worst: byScore[byScore.length - 1],
     measuredShare: measuredWeight / totalWeight,
