@@ -103,51 +103,6 @@ export function buildMapPoints(
   return [...portfolio.map(toMapPoint), ...opportunities.map(toMapPoint)];
 }
 
-export type PlaneDims = {
-  width: number;
-  height: number;
-  /** Inner padding so markers near the edges are not clipped. */
-  padX: number;
-  padY: number;
-};
-
-/**
- * Project a (score, risk) pair to pixel coordinates inside the plane. Score runs
- * left→right (higher is better, on the right); risk runs bottom→top (higher risk
- * sits higher up, matching the "danger is up" reading of the quadrant labels).
- */
-export function projectPoint(
-  score: number,
-  risk: number,
-  dims: PlaneDims,
-): { x: number; y: number } {
-  const innerW = dims.width - dims.padX * 2;
-  const innerH = dims.height - dims.padY * 2;
-  const x = dims.padX + (clamp(score, 0, 100) / 100) * innerW;
-  const y = dims.padY + (1 - clamp(risk, 0, 100) / 100) * innerH;
-  return { x, y };
-}
-
-export type RadiusScale = {
-  /** Smallest marker radius (also the fixed radius for non-owned opportunities). */
-  minR: number;
-  /** Largest marker radius (the heaviest owned position). */
-  maxR: number;
-  /** The largest owned weight in the book, used to normalise marker sizes. */
-  maxWeight: number;
-};
-
-/**
- * Marker radius. Owned holdings scale by portfolio weight between minR and maxR
- * (bigger = larger position); non-owned opportunities use the fixed minR so the
- * eye reads them as a uniform field of candidates rather than weighted holdings.
- */
-export function markerRadius(point: MapPoint, scale: RadiusScale): number {
-  if (!point.owned || scale.maxWeight <= 0) return scale.minR;
-  const t = clamp(point.weightPct / scale.maxWeight, 0, 1);
-  return scale.minR + t * (scale.maxR - scale.minR);
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }

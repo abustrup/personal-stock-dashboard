@@ -102,13 +102,12 @@ export function pickActionableStandout(
   investableSymbols?: Set<string>,
 ): StandoutPick {
   const candidates = opportunities.filter((rec) => rec.action !== "avoid");
-  const firstInvestable = investableSymbols
-    ? candidates.findIndex((rec) => investableSymbols.has(rec.company.symbol))
-    : candidates.length > 0
-      ? 0
-      : -1;
-  const standout = firstInvestable >= 0 ? candidates[firstInvestable] : candidates[0];
-  const standoutSkipped = firstInvestable > 0 ? firstInvestable : 0;
+  // Index of the first buyable candidate (no gate → the first candidate, if any).
+  const firstInvestable = candidates.findIndex(
+    (rec) => !investableSymbols || investableSymbols.has(rec.company.symbol),
+  );
+  const standout = candidates[firstInvestable >= 0 ? firstInvestable : 0];
+  const standoutSkipped = Math.max(0, firstInvestable);
   return { standout, standoutSkipped };
 }
 

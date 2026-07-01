@@ -72,8 +72,6 @@ function toHolding(row: CsvRow): Holding {
     currency: value(row, "Valuta"),
     quantity: parseDanishNumber(value(row, "Antal")),
     currentPrice: parseDanishNumber(value(row, "Aktuel kurs")),
-    costPrice: optionalNumber(value(row, "Kostpris")),
-    openingPrice: optionalNumber(value(row, "Åbningskurs")),
     marketValueDkk: parseDanishNumber(value(row, "Markedsværdi (DKK)")),
     costBasisDkk: optionalNumber(value(row, "Oprindelig værdi (DKK)")),
     totalGainDkk: optionalNumber(value(row, "Gevinst/Tab i alt (DKK)")),
@@ -83,7 +81,6 @@ function toHolding(row: CsvRow): Holding {
     // Source stores weight as a fraction (0.1179); surface it as a percent (11.79).
     // Missing/blank column → 0 rather than NaN.
     portfolioWeight: (optionalNumber(value(row, "% af portefølje")) ?? 0) * 100,
-    lastUpdated: value(row, "Senest opdateret") || undefined,
   };
 }
 
@@ -114,6 +111,11 @@ export function parseDanishNumber(raw: string): number {
   // as the decimal point ("1.234.567,89" \u2192 1234567.89). With no comma the dot is
   // already the decimal point ("24150.00" \u2192 24150), which matches this broker's
   // ungrouped export.
+  // No decimal comma but multiple dots → Danish thousands grouping (e.g. "1.234.567").
+  // Keying on >1 dot preserves the ungrouped decimal case ("24150.00" → 24150).
+  if (!cleaned.includes(",") && (cleaned.match(/\./g)?.length ?? 0) > 1) {
+    return Number(cleaned.replace(/\./g, ""));
+  }
   const normalized = cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned;
   return Number(normalized);
 }

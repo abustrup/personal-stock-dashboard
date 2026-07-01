@@ -159,7 +159,8 @@ export type Investability = {
   note: string;
 };
 
-const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+/** Whole-DKK formatter, shared with positionPlan.ts so the two cannot drift. */
+export const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 /**
  * Assess one company against the broker settings. Pure and synchronous: tradability

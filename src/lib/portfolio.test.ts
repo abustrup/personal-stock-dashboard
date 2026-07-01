@@ -69,6 +69,7 @@ describe("parseDanishNumber", () => {
   it("handles grouped Danish numbers without producing NaN or 1000x errors", () => {
     expect(parseDanishNumber("1.234.567,89")).toBeCloseTo(1234567.89);
     expect(parseDanishNumber("1.250,00")).toBeCloseTo(1250);
+    expect(parseDanishNumber("1.234.567")).toBeCloseTo(1234567);
   });
 
   it("returns NaN for empty input", () => {

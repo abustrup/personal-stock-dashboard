@@ -88,7 +88,7 @@ export function buildComparison(a: Recommendation, b: Recommendation): Compariso
 
   const scoreGap = a.score - b.score;
   const leader: Side = scoreGap === 0 ? "tie" : scoreGap > 0 ? "a" : "b";
-  const verdict = buildVerdict(a, b, axes, scoreGap, leader);
+  const verdict = buildVerdict(a, b, axes, leader);
 
   return { axes, scoreGap, leader, verdict };
 }
@@ -116,7 +116,6 @@ function buildVerdict(
   a: Recommendation,
   b: Recommendation,
   axes: CompareAxis[],
-  scoreGap: number,
   leader: Side,
 ): string {
   const nameA = a.company.name;

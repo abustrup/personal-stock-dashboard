@@ -72,6 +72,7 @@ import {
   collectKnownMarkets,
   investableSymbols,
   isExchangeUntradable,
+  isInvestable,
   reachBreakdown,
   reachGap,
   summarizeInvestability,
@@ -1334,7 +1335,7 @@ function LedgerRow({
   onSelect: (symbol: string) => void;
 }) {
   const { company, holding, compliance } = item;
-  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
+  const offLimits = investability !== undefined && !isInvestable(investability);
   const primaryTheme = company.themes[0] ? prettyTheme(company.themes[0]) : "";
   const dek = primaryTheme ? `${primaryTheme} · ${item.conviction} conviction` : `${item.conviction} conviction`;
   // "Today" must agree with the headline NAV's today%. The headline (valuation.ts
@@ -1371,9 +1372,7 @@ function LedgerRow({
           {hasBadge && (
             <span className="lt-badges">
               {company.userAdded && <WatchBadge />}
-              {compliance.status !== "unknown" && (
-                <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
-              )}
+              <ComplianceFlag status={compliance.status} />
               {offLimits && investability && <InvestabilityBadge investability={investability} />}
             </span>
           )}
@@ -1451,7 +1450,7 @@ function RailBrief({
 function RailNextBuy({ nextBuy, onSelect }: { nextBuy: NextBuy; onSelect: (symbol: string) => void }) {
   const { rec, skipped, investability, exposure, plan } = nextBuy;
   const { company } = rec;
-  const offLimits = investability.status !== "ok" && investability.status !== "unknown";
+  const offLimits = !isInvestable(investability);
   const ofBook = plan ? bookPctLabel(plan.bookFraction) : undefined;
   return (
     <button
@@ -1472,9 +1471,7 @@ function RailNextBuy({ nextBuy, onSelect }: { nextBuy: NextBuy; onSelect: (symbo
       {(company.userAdded || rec.compliance.status !== "unknown") && (
         <div className="rail-top-badges">
           {company.userAdded && <WatchBadge />}
-          {rec.compliance.status !== "unknown" && (
-            <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
-          )}
+          <ComplianceFlag status={rec.compliance.status} />
         </div>
       )}
       <div className="rail-top-why">{rec.headline}</div>
@@ -1515,6 +1512,13 @@ function WatchBadge() {
   );
 }
 
+// The EIFO compliance badge: a small warm-red pill for a flagged status. Self-guards
+// on "unknown" (renders nothing), so callers can drop the wrapping status check.
+function ComplianceFlag({ status }: { status: ComplianceStatus }) {
+  if (status === "unknown") return null;
+  return <span className={`flag ${status}`}>{status.replace("_", " ")}</span>;
+}
+
 // The investability gate badge: a quiet, slate-toned pill — deliberately NOT in
 // the warm-red EIFO palette, because this is a practical "can I act on it?" gate,
 // not a compliance danger. A bank pillar marks an off-platform market; a wallet
@@ -1539,9 +1543,15 @@ function InvestabilityBadge({ investability }: { investability: Investability })
 // Built from <span>s (phrasing content) so the meter stays valid markup even as a
 // descendant of the clickable standout button; the meter is aria-hidden with the
 // numbers carried in text.
+// The slot-meter fill percent for a buy plan: how much of one per-trade slot the
+// whole-share plan consumes, capped at a full slot for the meter width.
+function planFillPct(plan: PositionPlan): number {
+  return Math.min(100, Math.round(plan.budgetUse * 100));
+}
+
 function BuyPlan({ plan, variant }: { plan: PositionPlan; variant: "hero" | "detail" }) {
   const over = plan.status === "over";
-  const fillPct = Math.min(100, Math.round(plan.budgetUse * 100));
+  const fillPct = planFillPct(plan);
   const ofBook = bookPctLabel(plan.bookFraction);
   const slotLabel = over
     ? `${plan.slotMultiple >= 10 ? "10+" : plan.slotMultiple.toFixed(1)}× your DKK ${formatNumber(plan.budgetDkk)} slot`
@@ -2490,7 +2500,7 @@ function StandoutIdea({
   onSelect: (symbol: string) => void;
 }) {
   const { company } = rec;
-  const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
+  const offLimits = investability !== undefined && !isInvestable(investability);
   const todayPct = company.market?.dayChangePct;
   const plan = investability ? planPosition(investability, bookValueDkk) : undefined;
   return (
@@ -2516,9 +2526,7 @@ function StandoutIdea({
           {rec.conviction} conviction · {provenanceLabel(rec)}
         </span>
         {company.userAdded && <WatchBadge />}
-        {rec.compliance.status !== "unknown" && (
-          <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
-        )}
+        <ComplianceFlag status={rec.compliance.status} />
         {offLimits && investability && <InvestabilityBadge investability={investability} />}
       </div>
       <p className="standout-why">{rec.headline}</p>
@@ -2584,7 +2592,7 @@ function NextMoveRow({ move, onSelect }: { move: NextMove; onSelect: (symbol: st
   const { rec, plan, exposure, rank } = move;
   const { company } = rec;
   const todayPct = company.market?.dayChangePct;
-  const fillPct = Math.min(100, Math.round(plan.budgetUse * 100));
+  const fillPct = planFillPct(plan);
   const ofBook = bookPctLabel(plan.bookFraction);
   return (
     <li>
@@ -2600,9 +2608,7 @@ function NextMoveRow({ move, onSelect }: { move: NextMove; onSelect: (symbol: st
         <span className="next-move-main">
           <span className="next-move-name">
             {company.name} <span className="next-move-ticker">{company.symbol}</span>
-            {rec.compliance.status !== "unknown" && (
-              <span className={`flag ${rec.compliance.status}`}>{rec.compliance.status.replace("_", " ")}</span>
-            )}
+            <ComplianceFlag status={rec.compliance.status} />
           </span>
           <span className="next-move-fit">{moveFit(exposure)}</span>
         </span>
@@ -3003,9 +3009,7 @@ function CompareCard({
       </span>
       <div className="cmp-card-meta">
         <Action action={rec.action} />
-        {compliance.status !== "unknown" && (
-          <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
-        )}
+        <ComplianceFlag status={compliance.status} />
       </div>
       {holding ? (
         <span className={`cmp-card-return ${toneClass(holding.totalReturnPct)}`}>
@@ -3662,10 +3666,4 @@ function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "earlier";
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatAsOf(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }

@@ -72,6 +72,16 @@ export function isHoldingLive(
 }
 
 /**
+ * The cost basis a holding is valued from: the broker's own costBasisDkk when
+ * present, else reconstructed as marketValueDkk − totalGainDkk. Defined once so
+ * the per-row live return (liveHoldingReturnPct) and the headline (valuePortfolio)
+ * derive basis identically and reconcile by construction rather than by convention.
+ */
+function costBasisFor(holding: { marketValueDkk: number; costBasisDkk?: number; totalGainDkk?: number }): number {
+  return holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+}
+
+/**
  * The live all-time return % for a single holding, re-priced from its market
  * snapshot — or undefined when the holding is not live, so the caller falls back to
  * the broker's frozen figure. Uses the EXACT cost basis valuePortfolio sums
@@ -94,7 +104,7 @@ export function liveHoldingReturnPct(
   if (!isHoldingLive(holding, market) || market === undefined) return undefined;
   const factor = importFxFactor(holding);
   if (factor === undefined) return undefined;
-  const basis = holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+  const basis = costBasisFor(holding);
   if (!(basis > 0)) return undefined;
   const value = market.price * factor;
   return ((value - basis) / basis) * 100;
@@ -120,7 +130,7 @@ export function valuePortfolio(portfolio: Recommendation[]): LiveValuation {
     if (!holding) continue;
     total += 1;
     importedValueDkk += holding.marketValueDkk;
-    const basis = holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+    const basis = costBasisFor(holding);
     costBasisDkk += basis;
 
     const market = rec.company.market;

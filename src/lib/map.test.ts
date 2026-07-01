@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMapPoints,
-  markerRadius,
-  projectPoint,
   quadrantOf,
   riskIndex,
   toMapPoint,
@@ -115,48 +113,5 @@ describe("buildMapPoints", () => {
     );
     expect(points).toHaveLength(3);
     expect(points.filter((p) => p.owned)).toHaveLength(2);
-  });
-});
-
-describe("projectPoint", () => {
-  const dims = { width: 200, height: 100, padX: 10, padY: 10 };
-
-  it("places a higher score further right", () => {
-    const low = projectPoint(0, 50, dims);
-    const high = projectPoint(100, 50, dims);
-    expect(low.x).toBe(10);
-    expect(high.x).toBe(190);
-    expect(high.x).toBeGreaterThan(low.x);
-  });
-
-  it("places a higher risk further up (smaller y)", () => {
-    const calm = projectPoint(50, 0, dims);
-    const risky = projectPoint(50, 100, dims);
-    expect(calm.y).toBe(90); // low risk → bottom
-    expect(risky.y).toBe(10); // high risk → top
-    expect(risky.y).toBeLessThan(calm.y);
-  });
-
-  it("clamps out-of-range values inside the plane", () => {
-    expect(projectPoint(150, 150, dims).x).toBe(190);
-    expect(projectPoint(150, 150, dims).y).toBe(10);
-  });
-});
-
-describe("markerRadius", () => {
-  const scale = { minR: 4, maxR: 12, maxWeight: 40 };
-
-  it("scales owned holdings by weight between minR and maxR", () => {
-    expect(markerRadius(point({ owned: true, weightPct: 40 }), scale)).toBe(12); // heaviest → maxR
-    expect(markerRadius(point({ owned: true, weightPct: 0 }), scale)).toBe(4); // weightless → minR
-    expect(markerRadius(point({ owned: true, weightPct: 20 }), scale)).toBe(8); // half → midpoint
-  });
-
-  it("gives every non-owned opportunity the fixed minR", () => {
-    expect(markerRadius(point({ owned: false, weightPct: 0 }), scale)).toBe(4);
-  });
-
-  it("falls back to minR when no owned weight exists", () => {
-    expect(markerRadius(point({ owned: true, weightPct: 10 }), { ...scale, maxWeight: 0 })).toBe(4);
   });
 });

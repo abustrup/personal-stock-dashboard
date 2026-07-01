@@ -21,6 +21,12 @@ const HISTORY_POINTS = 52;
 
 const UA = "Mozilla/5.0";
 
+// Bound every network call. Node's global fetch has no default request timeout,
+// so a provider that accepts the connection but never responds would hang the
+// sequential refresh loop forever (and stall CI). A timeout throws into each
+// existing try/catch, degrading that symbol to unpriced/"missing" instead.
+const TIMEOUT_MS = 10_000;
+
 const cliSymbols = process.argv.slice(2);
 // By default, price the whole pickable set: the curated universe PLUS every name
 // the watchlist picker can add (companyDirectory.ts). Pre-pricing the directory
@@ -91,7 +97,7 @@ async function fetchYahooMarket(symbol) {
   url.searchParams.set("interval", "1d");
 
   try {
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const response = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!response.ok) return undefined;
     const data = await response.json();
     const result = data?.chart?.result?.[0];
@@ -105,9 +111,17 @@ async function fetchYahooMarket(symbol) {
     const low = meta.fiftyTwoWeekLow > 0 ? meta.fiftyTwoWeekLow : undefined;
     const metrics = deriveMarketMetrics({ price, closes, fiftyTwoWeekHigh: high, fiftyTwoWeekLow: low });
 
-    // meta.chartPreviousClose is the close *before the requested range* (a year
-    // ago here), not yesterday. Use the prior daily close from the same series.
-    const previousClose = closes.length >= 2 ? closes[closes.length - 2] : undefined;
+    // Prefer Yahoo's settled prior-session close for the 1-day change. Falling back
+    // to closes[length-2] is wrong on gappy names: the finite filter above drops
+    // null bars, so on a stale/halted day the second-to-last finite close can be
+    // several sessions old, silently reporting a multi-day move as "1 day".
+    // (meta.chartPreviousClose is the close before the whole 1y range, not usable.)
+    const previousClose =
+      typeof meta.regularMarketPreviousClose === "number" && meta.regularMarketPreviousClose > 0
+        ? meta.regularMarketPreviousClose
+        : closes.length >= 2
+          ? closes[closes.length - 2]
+          : undefined;
     const dayChangePct =
       previousClose && previousClose > 0 ? Math.round((price / previousClose - 1) * 10000) / 100 : undefined;
 
@@ -136,11 +150,15 @@ async function fetchYahooMarket(symbol) {
 async function getYahooSession() {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA } });
+      const r = await fetch("https://fc.yahoo.com", {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
       const setCookies = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [];
       const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
       const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
         headers: { "User-Agent": UA, Cookie: cookie },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       const crumb = (await cr.text()).trim();
       if (crumb && !crumb.includes("<") && crumb.length <= 40) return { cookie, crumb };
@@ -163,7 +181,10 @@ async function fetchYahooFundamentals(symbol, session) {
     let r;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       url.searchParams.set("crumb", session.crumb);
-      r = await fetch(url, { headers: { "User-Agent": UA, Cookie: session.cookie } });
+      r = await fetch(url, {
+        headers: { "User-Agent": UA, Cookie: session.cookie },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
       if (r.status !== 401 || attempt === 1) break;
       const fresh = await getYahooSession();
       if (!fresh) return undefined;
@@ -229,9 +250,26 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
   url.searchParams.set("apikey", apiKey);
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     const data = await response.json();
-    const feed = Array.isArray(data.feed) ? data.feed.slice(0, 8) : [];
+    // The keyless/free tier answers a throttle with HTTP 200 and an
+    // {Information|Note} body carrying no `feed`. A non-ok status or a missing
+    // feed is not a real reading — mark it "missing" rather than letting the
+    // empty aggregate collapse to a fabricated "live" neutral sentiment that then
+    // flows into the score as measured data.
+    if (!response.ok || !Array.isArray(data.feed)) {
+      const note = data?.Information ?? data?.Note;
+      return {
+        sentiment: 50,
+        direction: "neutral",
+        summary: note
+          ? `Alpha Vantage unavailable: ${note}`
+          : `Alpha Vantage returned no usable news (HTTP ${response.status}).`,
+        freshness: "missing",
+        sources: ["Alpha Vantage News Sentiment"],
+      };
+    }
+    const feed = data.feed.slice(0, 8);
     const tickerSentiments = feed.flatMap((item) => item.ticker_sentiment ?? []);
     const relevant = tickerSentiments.filter((item) => item.ticker === symbol);
     const avg =
@@ -263,7 +301,7 @@ async function fetchFinnhubRecommendation(symbol, apiKey) {
   url.searchParams.set("token", apiKey);
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
     const data = await response.json();
     const latest = Array.isArray(data) ? data[0] : undefined;
     const positive = Number(latest?.strongBuy ?? 0) + Number(latest?.buy ?? 0);

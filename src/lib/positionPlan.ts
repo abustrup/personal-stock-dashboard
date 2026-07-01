@@ -1,4 +1,4 @@
-import type { Investability } from "./investability";
+import { type Investability, DKK } from "./investability";
 
 /**
  * The step a broker's "top movers" never takes: turning "you can afford this" into
@@ -76,8 +76,6 @@ export function planPosition(inv: Investability, bookValueDkk: number): Position
     fxApprox: inv.fxApprox,
   };
 }
-
-const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 /** Round a 0–1 fraction to a percent, never showing a non-zero share as a bare "0%". */
 export function bookPctLabel(fraction: number | undefined): string | undefined {

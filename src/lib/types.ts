@@ -30,8 +30,6 @@ export type Holding = {
   currency: string;
   quantity: number;
   currentPrice: number;
-  costPrice?: number;
-  openingPrice?: number;
   marketValueDkk: number;
   /** Cost basis in DKK (broker "Oprindelig værdi (DKK)"), FX already applied. */
   costBasisDkk?: number;
@@ -45,7 +43,6 @@ export type Holding = {
   dayGainDkk?: number;
   /** Share of total portfolio as a percent number, e.g. 11.79 means 11.79%. */
   portfolioWeight: number;
-  lastUpdated?: string;
 };
 
 /** Reported company fundamentals plus the 0-100 axes derived from them. */
