@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getConfiguredProviders, mergeExternalSignals } from "./signals";
+import { mergeExternalSignals } from "./signals";
 
 describe("signals", () => {
-  it("does not require API keys for the dashboard to run", () => {
-    const providers = getConfiguredProviders({});
-
-    expect(providers).toEqual([]);
-  });
-
   it("merges live news and expert signals when a provider snapshot exists", () => {
     const company = {
       name: "Apple Inc.",

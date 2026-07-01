@@ -14,6 +14,11 @@ import { universe } from "../src/data/universe.ts";
 
 const UA = "Mozilla/5.0";
 
+// Provider display names, written once so the source list and the per-signal
+// `sources` arrays below cannot drift on a rename.
+const ALPHA_VANTAGE_LABEL = "Alpha Vantage News Sentiment";
+const FINNHUB_LABEL = "Finnhub Recommendation Trends";
+
 const cliSymbols = process.argv.slice(2);
 // Skip non-listed names (e.g. assetType "private" like SpaceX): their broker
 // proxy symbol can collide with an unrelated public ticker on Yahoo and be
@@ -36,8 +41,8 @@ const sources = ["Yahoo Finance (keyless prices)"];
 // A crumb/cookie session unlocks the keyless fundamentals endpoint.
 const session = await getYahooSession();
 if (session) sources.push("Yahoo fundamentals (valuation/growth/quality/balance-sheet)");
-if (apiKeys.alphaVantage) sources.push("Alpha Vantage News Sentiment");
-if (apiKeys.finnhub) sources.push("Finnhub Recommendation Trends");
+if (apiKeys.alphaVantage) sources.push(ALPHA_VANTAGE_LABEL);
+if (apiKeys.finnhub) sources.push(FINNHUB_LABEL);
 
 let priced = 0;
 let withFundamentals = 0;
@@ -220,7 +225,10 @@ async function fetchYahooFundamentals(symbol, session) {
       marketCap: inputs.marketCap,
       ...deriveFundamentalAxes(inputs),
     };
-  } catch {
+  } catch (error) {
+    // Surface parse/schema failures like the price path does, so a CI run shows
+    // when fundamentals silently degrade to editorial rather than hiding it.
+    console.warn(`Yahoo fundamentals for ${symbol} failed: ${error instanceof Error ? error.message : error}`);
     return undefined;
   }
 }
@@ -234,7 +242,23 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
   try {
     const response = await fetch(url);
     const data = await response.json();
-    const feed = Array.isArray(data.feed) ? data.feed.slice(0, 8) : [];
+    // The keyless/free tier answers a throttle with HTTP 200 and an
+    // {Information|Note} body carrying no `feed`. A non-ok status or a missing
+    // feed is not a real reading — mark it "missing" rather than letting the
+    // empty aggregate collapse to a fabricated "live" neutral sentiment.
+    if (!response.ok || !Array.isArray(data.feed)) {
+      const note = data?.Information ?? data?.Note;
+      return {
+        sentiment: 50,
+        direction: "neutral",
+        summary: note
+          ? `Alpha Vantage unavailable: ${note}`
+          : `Alpha Vantage returned no usable news (HTTP ${response.status}).`,
+        freshness: "missing",
+        sources: [ALPHA_VANTAGE_LABEL],
+      };
+    }
+    const feed = data.feed.slice(0, 8);
     const tickerSentiments = feed.flatMap((item) => item.ticker_sentiment ?? []);
     const relevant = tickerSentiments.filter((item) => item.ticker === symbol);
     const avg =
@@ -247,7 +271,7 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
       direction: sentiment > 57 ? "positive" : sentiment < 43 ? "negative" : "neutral",
       summary: feed[0]?.title ?? "No recent Alpha Vantage headline returned.",
       freshness: "live",
-      sources: ["Alpha Vantage News Sentiment"],
+      sources: [ALPHA_VANTAGE_LABEL],
     };
   } catch (error) {
     return {
@@ -255,7 +279,7 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
       direction: "neutral",
       summary: `Alpha Vantage fetch failed: ${error instanceof Error ? error.message : String(error)}`,
       freshness: "missing",
-      sources: ["Alpha Vantage News Sentiment"],
+      sources: [ALPHA_VANTAGE_LABEL],
     };
   }
 }
@@ -268,7 +292,19 @@ async function fetchFinnhubRecommendation(symbol, apiKey) {
   try {
     const response = await fetch(url);
     const data = await response.json();
-    const latest = Array.isArray(data) ? data[0] : undefined;
+    // A non-ok status or a non-array error body is not a real recommendation
+    // trend — mark it "missing" rather than reporting a fabricated "live"
+    // neutral. A genuine empty array (no analyst coverage) is a valid live
+    // reading and still flows through the neutral path below.
+    if (!response.ok || !Array.isArray(data)) {
+      return {
+        direction: "neutral",
+        summary: `Finnhub recommendation unavailable (HTTP ${response.status}).`,
+        freshness: "missing",
+        sources: [FINNHUB_LABEL],
+      };
+    }
+    const latest = data[0];
     const positive = Number(latest?.strongBuy ?? 0) + Number(latest?.buy ?? 0);
     const negative = Number(latest?.sell ?? 0) + Number(latest?.strongSell ?? 0);
     const direction = positive > negative ? "positive" : negative > positive ? "negative" : "neutral";
@@ -279,14 +315,14 @@ async function fetchFinnhubRecommendation(symbol, apiKey) {
         ? `${positive} buy or strong-buy ratings versus ${negative} sell or strong-sell ratings.`
         : "No Finnhub recommendation trend returned.",
       freshness: "live",
-      sources: ["Finnhub Recommendation Trends"],
+      sources: [FINNHUB_LABEL],
     };
   } catch (error) {
     return {
       direction: "neutral",
       summary: `Finnhub fetch failed: ${error instanceof Error ? error.message : String(error)}`,
       freshness: "missing",
-      sources: ["Finnhub Recommendation Trends"],
+      sources: [FINNHUB_LABEL],
     };
   }
 }

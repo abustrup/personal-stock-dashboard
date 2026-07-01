@@ -177,7 +177,7 @@ export default function App() {
             value={insights.compliance.count > 0 ? `${insights.compliance.count} flagged` : "None flagged"}
             detail={
               insights.compliance.top
-                ? `${insights.compliance.top.compliance.status.replace("_", " ")} · ${insights.compliance.top.company.name}`
+                ? `${complianceLabel(insights.compliance.top.compliance.status)} · ${insights.compliance.top.company.name}`
                 : "No holding blocked or overlapping"
             }
             onClick={() => open(insights.compliance.top?.company.symbol)}
@@ -330,7 +330,7 @@ function DecisionCard({ item, onSelect }: { item: Recommendation; onSelect: (sym
             {item.conviction} · {item.measured ? "data-backed" : "editorial"}
           </span>
           {compliance.status !== "unknown" && (
-            <span className={`flag ${compliance.status}`}>{compliance.status.replace("_", " ")}</span>
+            <span className={`flag ${compliance.status}`}>{complianceLabel(compliance.status)}</span>
           )}
         </div>
         <strong className="dc-name">{company.name}</strong>
@@ -416,7 +416,7 @@ function CompanyDetail({
       <div className={`compliance ${compliance.status}`}>
         <AlertTriangle size={18} aria-hidden="true" />
         <div>
-          <strong>EIFO: {compliance.status.replace("_", " ")}</strong>
+          <strong>EIFO: {complianceLabel(compliance.status)}</strong>
           {compliance.flags.map((flag) => (
             <span key={flag}>{flag}</span>
           ))}
@@ -611,6 +611,12 @@ function Action({ action }: { action: Recommendation["action"] }) {
 
 function prettyTheme(theme: string): string {
   return theme.replace(/-/g, " ");
+}
+
+// Human label for a compliance status enum (only `possible_overlap` carries an
+// underscore). One helper so every render site presents the status identically.
+function complianceLabel(status: ComplianceStatus): string {
+  return status.replace("_", " ");
 }
 
 function ordinal(n: number): string {
