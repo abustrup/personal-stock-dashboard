@@ -48,7 +48,7 @@ import {
 } from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildBookScorecard, type BookScorecard as BookScorecardModel, type Stance, type StanceSlice } from "./lib/scorecard";
-import { importFxFactor, isHoldingLive, valuePortfolio, type LiveValuation } from "./lib/valuation";
+import { importFxFactor, isHoldingLive, liveHoldingReturnPct, valuePortfolio, type LiveValuation } from "./lib/valuation";
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./lib/positionSlots";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
@@ -1347,6 +1347,16 @@ function LedgerRow({
   // have no holding, so they keep using the snapshot day-change as before.
   const liveToday = holding && isHoldingLive(holding, company.market) ? company.market?.dayChangePct : undefined;
   const todayPct = liveToday ?? holding?.dayReturnPct ?? company.market?.dayChangePct;
+  // "Total" must agree with the headline NAV's all-time return the same way TODAY
+  // does. The headline (valuation.ts liveReturnPct) re-prices every live holding at
+  // its snapshot; a live row's TOTAL shows that same re-priced return, not the
+  // broker's frozen "% Total afkast" (totalReturnPct) captured at import — which can
+  // sit red under a headline the live price has pushed green (e.g. a name recovered
+  // since import). Gated on the EXACT isHoldingLive predicate the headline uses, so
+  // the cost-basis-weighted rows reconcile with the headline; a holding the headline
+  // counts at its broker value likewise falls to its broker totalReturnPct here.
+  const liveTotal = holding ? liveHoldingReturnPct(holding, company.market) : undefined;
+  const totalPct = liveTotal ?? holding?.totalReturnPct;
   const hasBadge = company.userAdded || compliance.status !== "unknown" || offLimits;
   return (
     <button
@@ -1381,9 +1391,7 @@ function LedgerRow({
       </span>
       {variant === "holding" ? (
         <>
-          <span className={`lt-num lt-total ${toneClass(holding?.totalReturnPct)}`}>
-            {formatSignedPct(holding?.totalReturnPct)}
-          </span>
+          <span className={`lt-num lt-total ${toneClass(totalPct)}`}>{formatSignedPct(totalPct)}</span>
           <span className={`lt-num lt-today ${toneClass(todayPct)}`}>{formatSignedPct(todayPct)}</span>
           <span className="lt-num">
             <span className="lt-weight-num">{holding ? `${holding.portfolioWeight.toFixed(1)}%` : "—"}</span>

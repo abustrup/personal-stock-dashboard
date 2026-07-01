@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importFxFactor, isHoldingLive, valuePortfolio } from "./valuation";
+import { importFxFactor, isHoldingLive, liveHoldingReturnPct, valuePortfolio } from "./valuation";
 import type { Company, Holding, MarketSnapshot, Recommendation } from "./types";
 
 const market = (over: Partial<MarketSnapshot> = {}): MarketSnapshot => ({
@@ -106,6 +106,44 @@ describe("isHoldingLive", () => {
     expect(isHoldingLive(holding({ symbol: "AAA", currency: "USD" }), market({ price: 110, currency: "DKK" }))).toBe(
       false,
     );
+  });
+});
+
+describe("liveHoldingReturnPct", () => {
+  it("re-prices the all-time return from the live snapshot, not the frozen import", () => {
+    // basis 6000, factor 69; live price 110 → value 7590 → (7590−6000)/6000 = +26.5%.
+    expect(liveHoldingReturnPct(holding({ symbol: "AAA" }), market({ price: 110 }))).toBeCloseTo(26.5, 6);
+  });
+
+  it("is undefined (row falls back to the broker figure) when the holding is not live", () => {
+    expect(liveHoldingReturnPct(holding({ symbol: "AAA" }), undefined)).toBeUndefined();
+    expect(liveHoldingReturnPct(holding({ symbol: "AAA" }), market({ price: 110, currency: "DKK" }))).toBeUndefined();
+    expect(liveHoldingReturnPct(holding({ symbol: "AAA", currentPrice: 0 }), market({ price: 110 }))).toBeUndefined();
+  });
+
+  it("derives the basis exactly as valuePortfolio does — costBasisDkk, else marketValueDkk − totalGainDkk", () => {
+    // No costBasisDkk: basis = marketValueDkk 6900 − totalGainDkk 900 = 6000; price 110 → +26.5%.
+    const h = holding({ symbol: "AAA", costBasisDkk: undefined, totalGainDkk: 900 });
+    expect(liveHoldingReturnPct(h, market({ price: 110 }))).toBeCloseTo(26.5, 6);
+  });
+
+  it("returns undefined on a non-positive basis instead of a wild percentage", () => {
+    const h = holding({ symbol: "AAA", costBasisDkk: 0 });
+    expect(liveHoldingReturnPct(h, market({ price: 110 }))).toBeUndefined();
+  });
+
+  it("the cost-basis-weighted mean of the per-row live returns IS the headline liveReturnPct (no drift)", () => {
+    // Two live holdings with different bases; the ledger TOTAL rows must reconcile with
+    // the headline all-time return the same way TODAY reconciles with liveDayPct.
+    const portfolio = [
+      rec({ symbol: "AAA", holding: { costBasisDkk: 6000 }, market: { price: 120 } }), // value 8280, gain 2280
+      rec({ symbol: "BBB", holding: { costBasisDkk: 3000 }, market: { price: 80 } }), // value 5520, gain 2520
+    ];
+    const v = valuePortfolio(portfolio);
+    const rowsWeightedMean =
+      portfolio.reduce((acc, r) => acc + r.holding!.costBasisDkk! * liveHoldingReturnPct(r.holding!, r.company.market)!, 0) /
+      portfolio.reduce((acc, r) => acc + r.holding!.costBasisDkk!, 0);
+    expect(rowsWeightedMean).toBeCloseTo(v.liveReturnPct, 6);
   });
 });
 
