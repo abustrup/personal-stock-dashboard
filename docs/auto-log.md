@@ -38,7 +38,92 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   until reconciled against `main`'s real `HEAD`. The panel still paid off — it forced the wrong-tree
   catch and a deploy-source check (`.github/workflows/deploy.yml` fires on `branches: [main]`).
 
+- **Ledger "TODAY" is now LIVE Yahoo day-change, not the broker `% 1D afk.` (run #8 superseded run #3's caution).**
+  Run #3 cautioned "overriding the broker `% 1D afk.` would wrongly relabel broker data" — correct *in its era*, when the
+  whole portfolio screen was broker-consistent. Run #4 then made the headline NAV today% LIVE (Yahoo `liveDayPct`),
+  leaving the ledger TODAY column the LONE surface still on the broker's frozen `dayReturnPct` → a green headline over
+  mostly-red rows that didn't weight-average to it. Run #8 flipped the ledger row to the live Yahoo `dayChangePct`,
+  gated on the SAME `isHoldingLive` predicate the headline uses (so the row and headline branch identically per holding
+  in every coverage state), with broker `dayReturnPct` kept as the import-only/partial fallback. This is NOT a relabel:
+  per `types.ts` both `dayReturnPct` and `dayChangePct` are MEASURED, and broker data is *demoted* (now the fallback),
+  never headlined. **Don't** re-add broker `% 1D afk.` to the live ledger TODAY column. The broker `dayReturnPct` field
+  stays in `types.ts`/`portfolio.ts` (it still drives the import-only fallback and the headline's uncovered blend).
+
 ## Runs (most recent first)
+
+### 2026-07-01 — reconcile the ledger "TODAY" with the live headline (self-directed run #8)
+- **Assessment:** Drove the LIVE app end-to-end across all five surfaces in an isolated worktree
+  (`~/Documents/psd-run8`, fresh `npm run refresh` = 41/41 priced + fundamentals; the preview MCP
+  pointed at this worktree's own server so I assessed the fresh measured view, not the main
+  checkout's snapshot). A sibling run was active on port 5180 during this run — the documented
+  concurrency hazard is live, so I kept all edits in the isolated worktree and pushed early. The app
+  is mature and honest: Portfolio, Opportunities (budget/EIFO-aware), Map (score×risk), Compare
+  (per-axis MEASURED/EDITORIAL + MODEL'S PICK), and Company (Data/Price/Editorial provenance header,
+  annotated chart, EIFO "cannot be called clean") all remain genuinely distinct and strong — don't
+  consolidate. Judged trust-first, I found one concrete, currently-visible §1 honesty defect on the
+  Portfolio screen — a **same-screen "today" self-contradiction**: the headline NAV reads green
+  "+2.29% today" (`valuation.ts` `liveDayPct`, Yahoo live, value-weighted across the book — every
+  holding up per Yahoo) while the holdings TODAY column rendered the broker's **frozen** `% 1D afk.`
+  (`dayReturnPct`, captured at the CSV's import instant: NVDA −1.30% red, MSFT −0.90%, TSLA −1.90%).
+  Two day-return semantics under one unlabelled word "today", contradicting in sign, with the rows
+  not weight-averaging to the headline. **Key finding:** the ledger row was the LONE surface still on
+  broker `dayReturnPct` — Compare cards, opportunity/next-move cards, and Company detail already use
+  Yahoo `dayChangePct`. This seam was emergent, not a single wrong line: run #3 (broker column) and
+  run #4 (live Yahoo headline) were each correct in isolation; the contradiction only appeared once
+  both shipped. This is exactly the same-screen-contradiction class runs #3/#6 treated as
+  tipping-point-worthy. An independent 3-lens decision panel (trust / coherence / skeptical-cold-read,
+  run to counter my own anchoring) returned **3× fix-a, high confidence**, all confirming it's a real
+  trust defect and that the fix respects the guardrails. Runner-ups declined: Fix B (label the column
+  "from Saxo") — keeps the contradiction on screen and adds clutter, the opposite of coherence;
+  ship-nothing — leaves a daily, headline-screen honesty violation; the App.tsx monolith refactor —
+  perennially declined (internal-only, coherence #3 < trust #1, destabilising).
+- **Move:** deepen/polish (trust-first). Flipped the ledger row's TODAY precedence to **live Yahoo
+  `dayChangePct` first**, broker `dayReturnPct` as fallback — finishing the migration run #4 started.
+  Per the panel's skeptic lens, gated the row on the EXACT same `isHoldingLive` predicate the headline
+  uses (extracted as a shared exported helper in `valuation.ts` so the row and the headline can't
+  drift): a holding the headline folds into `liveDayPct` shows its live day-change in the row; one the
+  headline counts via broker `dayGainDkk` (currency mismatch / no price) likewise falls to its broker
+  `dayReturnPct`. So header and rows track the SAME source in every coverage state (fully-live /
+  import-only / partial), and `liveDayPct` is by construction the value-weighted mean of the per-row
+  day-changes now shown — they reconcile, not merely coexist. Broker `dayReturnPct` is demoted (the
+  fallback), never relabelled (both fields are MEASURED), and stays in `types.ts`/`portfolio.ts`.
+  Opportunity rows are untouched (no holding → already Yahoo). Pure presentational precedence + one
+  shared predicate; no scoring/valuation math moved. +5 tests: `isHoldingLive` (3, incl. that it
+  matches `valuePortfolio`'s own covered/uncovered split), a `liveDayPct`-is-the-weighted-mean pin,
+  and an App render test asserting a live holding's row shows the snapshot day-change (+2.50%) not the
+  broker −1.30%, while an unpriced holding falls back to the broker +0.80%. 326 tests + build green
+  (bundle 325.25 kB, flat). Live-verified in the browser: the TODAY column now reads NVDA +2.63%,
+  GOOGL +1.05%, MSFT +1.21%, SOXX +4.30%, AAPL +2.70%, TSLA +2.13% — all green, weight-averaging to
+  the +2.29% headline; TOTAL stays broker-sourced and correctly independent (TSLA −6.50% total yet
+  +2.13% today is coherent, not a contradiction). Invoked the routine's anti-anchoring panel rather
+  than `/frontend-design` since this is a data-provenance fix with zero new visual vocabulary.
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this
+  worktree's real HEAD) verdict **SHIP** — strictly better, no regression. It walked the
+  `liveToday ?? holding?.dayReturnPct ?? company.market?.dayChangePct` expression through every
+  coverage state and confirmed the row and headline branch identically on the shared `isHoldingLive`
+  predicate; independently verified the one theoretically-divergent state (live price with undefined
+  `dayChangePct`) is UNREACHABLE from the data pipeline (`scripts/refresh-data.mjs:110-112`
+  co-populates `previousClose` and `dayChangePct`); confirmed no MEASURED↔EDITORIAL relabel (both
+  fields measured per `types.ts`), broker data demoted not headlined, opportunity variant untouched,
+  tests non-vacuous (the App test pins to the real seed +0.80%/−1.30% so a precedence flip-back
+  fails); and ran its own `npm test` (326 passed) + `npm run build` (green, 325.25 kB).
+  **Adoption note (shipped by a later session):** this branch was committed but *stranded before a
+  PR was opened* — the originating session died at the "about to ship" step (a `claude-opus-4-8`
+  upstream outage was disabling the Bash safety classifier that gates git/npm around then). A
+  subsequent self-improve run found the 11h-idle branch (no PR, based cleanly on current `main`),
+  judged it the highest-leverage move (finish stranded, trust-first work over starting a new change),
+  and re-verified it independently before shipping: confirmed the base is current `main`, re-ran
+  `npm test` (326 passed) + `npm run build` (325.25 kB, flat), fresh `npm run refresh` (41/41 priced),
+  and ran a **fresh** independent adversarial reviewer anchored to this exact HEAD — verdict again
+  **SHIP**, no must-fix (it proved the App test non-vacuous by flipping the precedence back → failure,
+  and noted the single-daily-close `dayChangePct`-undefined edge is *pre-existing on `main`*, not
+  introduced here). Fixed one cosmetic nit the reviewer flagged (a stray double blank line in
+  `valuation.test.ts`). Shipped — PR #44.
+  *Carry-forward:* every "today" in the app now shares one source (live Yahoo `dayChangePct`, broker
+  fallback) via the shared `isHoldingLive` predicate; don't re-split it (see the new standing note).
+  The freshness-vocabulary unification (header chip / NAV caption / "since last refresh") remains an
+  open, deliberately-deferred coherence nicety; the App.tsx monolith refactor remains the standing
+  decline.
 
 ### 2026-06-30 — mobile topbar clip fix (self-directed run #7)
 - **Assessment:** Drove the LIVE app end-to-end across all five surfaces (own worktree, fresh

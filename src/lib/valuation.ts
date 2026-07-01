@@ -52,6 +52,26 @@ export function importFxFactor(holding: { marketValueDkk: number; currentPrice: 
 }
 
 /**
+ * Is this holding re-priced from a live snapshot? The single predicate the headline
+ * NAV and any per-row "live" treatment must share: a usable snapshot price in the
+ * holding's own currency, with an import-implied FX factor to convert it. Exported so
+ * the ledger row decides "show the live day-change" with the EXACT same test the
+ * headline uses to fold a holding into liveDayPct — they can't drift and silently
+ * re-open a row-vs-headline source split.
+ */
+export function isHoldingLive(
+  holding: { currency: string; marketValueDkk: number; currentPrice: number },
+  market: { price: number; currency: string } | undefined,
+): boolean {
+  return (
+    market !== undefined &&
+    market.price > 0 &&
+    market.currency === holding.currency &&
+    importFxFactor(holding) !== undefined
+  );
+}
+
+/**
  * Re-price a portfolio from live market snapshots. Pure: takes the dashboard's
  * portfolio recommendations (each carrying its holding + enriched company.market)
  * and returns the live headline figures plus an honest coverage report.
@@ -76,11 +96,7 @@ export function valuePortfolio(portfolio: Recommendation[]): LiveValuation {
 
     const market = rec.company.market;
     const factor = importFxFactor(holding);
-    const isLive =
-      market !== undefined &&
-      market.price > 0 &&
-      market.currency === holding.currency &&
-      factor !== undefined;
+    const isLive = isHoldingLive(holding, market);
 
     if (isLive && market && factor !== undefined) {
       const value = market.price * factor;

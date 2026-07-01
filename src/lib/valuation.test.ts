@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importFxFactor, valuePortfolio } from "./valuation";
+import { importFxFactor, isHoldingLive, valuePortfolio } from "./valuation";
 import type { Company, Holding, MarketSnapshot, Recommendation } from "./types";
 
 const market = (over: Partial<MarketSnapshot> = {}): MarketSnapshot => ({
@@ -78,7 +78,54 @@ describe("importFxFactor", () => {
   });
 });
 
+describe("isHoldingLive", () => {
+  const h = { currency: "USD", marketValueDkk: 6900, currentPrice: 100 };
+
+  it("is true for a usable same-currency snapshot price", () => {
+    expect(isHoldingLive(h, { price: 110, currency: "USD" })).toBe(true);
+  });
+
+  it("is false without a snapshot, with a non-positive price, on a currency mismatch, or with no usable import price", () => {
+    expect(isHoldingLive(h, undefined)).toBe(false);
+    expect(isHoldingLive(h, { price: 0, currency: "USD" })).toBe(false);
+    expect(isHoldingLive(h, { price: 110, currency: "DKK" })).toBe(false);
+    expect(isHoldingLive({ ...h, currentPrice: 0 }, { price: 110, currency: "USD" })).toBe(false);
+  });
+
+  it("matches valuePortfolio's own covered/uncovered split (one predicate, no drift)", () => {
+    // The headline folds a holding into liveDayPct iff isHoldingLive is true, so the
+    // ledger row keys its live day-change off the SAME call. Mirror the three states.
+    const liveV = valuePortfolio([rec({ symbol: "AAA", market: { price: 110, currency: "USD" } })]);
+    expect(liveV.covered).toBe(1);
+    expect(isHoldingLive(holding({ symbol: "AAA" }), market({ price: 110, currency: "USD" }))).toBe(true);
+
+    const mismatchV = valuePortfolio([
+      rec({ symbol: "AAA", holding: { currency: "USD" }, market: { price: 110, currency: "DKK" } }),
+    ]);
+    expect(mismatchV.covered).toBe(0);
+    expect(isHoldingLive(holding({ symbol: "AAA", currency: "USD" }), market({ price: 110, currency: "DKK" }))).toBe(
+      false,
+    );
+  });
+});
+
 describe("valuePortfolio", () => {
+  it("liveDayPct is the value-weighted mean of the per-row day-changes the ledger shows", () => {
+    // The headline today% and the ledger TODAY column must reconcile: liveDayPct is,
+    // by construction, the prev-value-weighted average of each live row's dayChangePct
+    // (the very number the row now renders). Two holdings, +2% and −1%, weighted by
+    // their live values, must land exactly between them — not on some third figure.
+    const v = valuePortfolio([
+      rec({ symbol: "UP", market: { price: 102, previousClose: 100 } }), // +2%, value 102×69 = 7038
+      rec({ symbol: "DN", market: { price: 99, previousClose: 100 } }), // −1%, value 99×69 = 6831
+    ]);
+    // prevValue = (100+100)×69 = 13800; dayGain = (2 + −1)×69 = 69 → 69/13800 = +0.5%
+    expect(v.liveDayPct).toBeCloseTo(0.5, 6);
+    // Bracketed by the two rows, never outside them.
+    expect(v.liveDayPct).toBeGreaterThan(-1);
+    expect(v.liveDayPct).toBeLessThan(2);
+  });
+
   it("re-prices a covered holding at the live price via the import-implied FX", () => {
     // factor 69; live price 110 → 110 × 69 = 7590 DKK (was imported at 6900).
     const v = valuePortfolio([rec({ symbol: "AAA", market: { price: 110, previousClose: 108 } })]);

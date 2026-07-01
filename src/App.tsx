@@ -48,7 +48,7 @@ import {
 } from "./lib/opportunities";
 import { buildBookComposition, type BookComposition as BookCompositionModel } from "./lib/allocation";
 import { buildBookScorecard, type BookScorecard as BookScorecardModel, type Stance, type StanceSlice } from "./lib/scorecard";
-import { importFxFactor, valuePortfolio, type LiveValuation } from "./lib/valuation";
+import { importFxFactor, isHoldingLive, valuePortfolio, type LiveValuation } from "./lib/valuation";
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./lib/positionSlots";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
@@ -1337,7 +1337,16 @@ function LedgerRow({
   const offLimits = investability && investability.status !== "ok" && investability.status !== "unknown";
   const primaryTheme = company.themes[0] ? prettyTheme(company.themes[0]) : "";
   const dek = primaryTheme ? `${primaryTheme} · ${item.conviction} conviction` : `${item.conviction} conviction`;
-  const todayPct = holding?.dayReturnPct ?? company.market?.dayChangePct;
+  // "Today" must agree with the headline NAV's today%. The headline (valuation.ts
+  // liveDayPct) re-prices every live holding from its Yahoo snapshot, so a live
+  // holding's row shows that same measured day-change — not the broker's frozen
+  // "% 1D afk." (dayReturnPct), which is captured at import and would contradict the
+  // green/red the headline implies. Gated on the EXACT isHoldingLive predicate the
+  // headline uses: a holding the headline counts via broker dayGainDkk (currency
+  // mismatch / no price) likewise falls to its broker dayReturnPct here. Opportunities
+  // have no holding, so they keep using the snapshot day-change as before.
+  const liveToday = holding && isHoldingLive(holding, company.market) ? company.market?.dayChangePct : undefined;
+  const todayPct = liveToday ?? holding?.dayReturnPct ?? company.market?.dayChangePct;
   const hasBadge = company.userAdded || compliance.status !== "unknown" || offLimits;
   return (
     <button

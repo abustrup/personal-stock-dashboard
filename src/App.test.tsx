@@ -625,6 +625,48 @@ describe("App", () => {
     expect(await screen.findByText(/LIVE · YHOO/i)).toBeInTheDocument();
   });
 
+  it("shows a live holding's day-change from the snapshot, not the broker's frozen % 1D afk.", async () => {
+    // The headline NAV today% re-prices every live holding from its Yahoo snapshot
+    // (valuation.ts liveDayPct). The ledger TODAY column must agree: a live holding's
+    // row shows that same measured day-change, not the broker's frozen dayReturnPct
+    // captured at import — otherwise a green headline sits over contradicting red rows.
+    // NVDA is priced (so it is live: USD snapshot, positive price); GOOGL is NOT priced
+    // (so its row must fall back to the broker figure, exactly as the headline does).
+    const snapshot = {
+      generatedAt: new Date().toISOString(),
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: {
+          symbol: "NVDA",
+          price: 205,
+          currency: "USD",
+          previousClose: 200,
+          dayChangePct: 2.5, // live: differs from the broker's −1.30% for NVDA
+          momentum: 61,
+          asOf: "2026-06-28T18:49:41.386Z",
+        },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    // NVIDIA is live → its TODAY cell tracks the snapshot day-change (+2.50%), and must
+    // NOT show the broker's frozen −1.30%.
+    const nvda = await screen.findByRole("button", { name: /NVIDIA Corp\..*open detail/i });
+    await waitFor(() => {
+      const today = nvda.querySelector(".lt-today");
+      expect(today?.textContent).toBe("+2.50%");
+    });
+    expect(nvda.querySelector(".lt-today")?.textContent).not.toContain("1.30");
+
+    // Alphabet has no snapshot → not live → its TODAY falls back to the broker's
+    // frozen % 1D afk. (+0.80% in the demo CSV), matching how the headline counts it.
+    const googl = screen.getByRole("button", { name: /Alphabet Inc\..*open detail/i });
+    expect(googl.querySelector(".lt-today")?.textContent).toBe("+0.80%");
+  });
+
   it("stops claiming LIVE and names the age when the snapshot is stale", async () => {
     const snapshot = {
       // Refreshed three days ago: real Yahoo prices, but no longer current.
