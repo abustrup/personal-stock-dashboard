@@ -126,7 +126,6 @@ describe("valuePortfolio", () => {
     expect(v.liveDayPct).toBeLessThan(2);
   });
 
-
   it("re-prices a covered holding at the live price via the import-implied FX", () => {
     // factor 69; live price 110 → 110 × 69 = 7590 DKK (was imported at 6900).
     const v = valuePortfolio([rec({ symbol: "AAA", market: { price: 110, previousClose: 108 } })]);

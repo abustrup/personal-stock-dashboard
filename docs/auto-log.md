@@ -106,8 +106,19 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   co-populates `previousClose` and `dayChangePct`); confirmed no MEASURED↔EDITORIAL relabel (both
   fields measured per `types.ts`), broker data demoted not headlined, opportunity variant untouched,
   tests non-vacuous (the App test pins to the real seed +0.80%/−1.30% so a precedence flip-back
-  fails); and ran its own `npm test` (326 passed) + `npm run build` (green, 325.25 kB). Shipped —
-  _PR # appended on merge._
+  fails); and ran its own `npm test` (326 passed) + `npm run build` (green, 325.25 kB).
+  **Adoption note (shipped by a later session):** this branch was committed but *stranded before a
+  PR was opened* — the originating session died at the "about to ship" step (a `claude-opus-4-8`
+  upstream outage was disabling the Bash safety classifier that gates git/npm around then). A
+  subsequent self-improve run found the 11h-idle branch (no PR, based cleanly on current `main`),
+  judged it the highest-leverage move (finish stranded, trust-first work over starting a new change),
+  and re-verified it independently before shipping: confirmed the base is current `main`, re-ran
+  `npm test` (326 passed) + `npm run build` (325.25 kB, flat), fresh `npm run refresh` (41/41 priced),
+  and ran a **fresh** independent adversarial reviewer anchored to this exact HEAD — verdict again
+  **SHIP**, no must-fix (it proved the App test non-vacuous by flipping the precedence back → failure,
+  and noted the single-daily-close `dayChangePct`-undefined edge is *pre-existing on `main`*, not
+  introduced here). Fixed one cosmetic nit the reviewer flagged (a stray double blank line in
+  `valuation.test.ts`). Shipped — PR #__PR__.
   *Carry-forward:* every "today" in the app now shares one source (live Yahoo `dayChangePct`, broker
   fallback) via the shared `isHoldingLive` predicate; don't re-split it (see the new standing note).
   The freshness-vocabulary unification (header chip / NAV caption / "since last refresh") remains an
