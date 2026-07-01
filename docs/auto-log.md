@@ -51,6 +51,71 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-01 — live Compare-card TOTAL (self-directed run #10)
+- **Assessment:** Fresh isolated worktree (`~/Documents/psd-run10`, `node_modules` symlinked, pushed
+  early per the concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals. No open PRs,
+  no live sibling. Drove the LIVE app end-to-end across all five surfaces. The preview MCP was again
+  captured by the *main* checkout's dev server on 5180 (the documented run #4/#6/#8/#9 binding hazard) —
+  I confirmed via `lsof` that 5180's cwd is the main checkout at HEAD 69e4beb (== my base, NOT a divergent
+  branch — the run #7 wrong-tree check), refreshed its gitignored `live-signals.json` so I could assess
+  the true LIVE state, and did not force the binding. The app is mature and honest: Portfolio (live NAV +
+  reconciled ledger TODAY/TOTAL), Opportunities (budget/EIFO-aware, nothing silently dropped), Map
+  (score×risk, stated risk method), Compare (per-axis MEASURED/EDITORIAL + MODEL'S PICK), Company
+  (Data/Price/Editorial header, annotated chart, EIFO "cannot be called clean") all remain genuinely
+  distinct — don't consolidate. Judged trust-first, the one concrete, currently-visible gap was a
+  **cross-surface number contradiction**: run #9 made the ledger TOTAL column live (NVDA **+33.39%**), but
+  the **Compare card's headline return for an owned name still showed the broker's frozen "% Total afkast"
+  — NVDA "+32.00% total · from Saxo"** (App.tsx:3011-3012). The SAME NVDA "total" read +33.39% on Portfolio
+  and +32.00% on Compare — a same-name divergence on a MEASURED figure, and exactly the next-coherence step
+  run #9's own carry-forward named. This is the same tipping-point class runs #3/#6/#8/#9 shipped. An
+  independent 3-lens decision panel (trust / coherence-cold-read / decisiveness+bigger-defect-hunt, run to
+  counter my anchoring and anchored to my worktree HEAD) returned **3× endorse, high confidence, no stronger
+  move**; the decisive lens's own bigger-defect sweep found none (it verified "Advanced" is the real full
+  company name "Advanced Micro Devices", not a truncation, and that TODAY was already reconciled in run #8).
+  Runner-ups declined: (a) also make the Company-detail "From Saxo" broker strip (App.tsx:3234-3246) live —
+  rejected as a honesty regression: that strip is a deliberately-demoted broker-P&L island (tagged "From
+  Saxo", its % paired with the broker's frozen `totalGainDkk`), so a live % there would mislabel Yahoo data
+  as "From Saxo" AND desync from the paired DKK gain; (b) ship-nothing — a real contender on a mature app,
+  but this is a currently-visible value-#1 contradiction, so it clears the bar; (c) the App.tsx-monolith
+  refactor — perennially declined (internal-only, coherence #3 < trust #1, destabilising).
+- **Move:** deepen/polish (trust + coherence). In the Compare card, surfaced the live all-time return via
+  run #9's existing tested helper — `liveTotal = liveHoldingReturnPct(holding, company.market); totalReturn
+  = liveTotal ?? holding?.totalReturnPct` — a byte-for-byte mirror of the ledger row (App.tsx:1358-1359):
+  same helper, same `isHoldingLive` gate, same cost basis, so the Compare total, the ledger total and the
+  headline `liveReturnPct` reconcile by construction (the same holding now reads one number across tabs).
+  `toneClass` is keyed off the displayed value so colour tracks the shown figure. The "· from Saxo" credit
+  is dropped ONLY in the live branch (a live figure is Yahoo-repriced, not from Saxo — the ledger carries no
+  label either) and RETAINED on the broker fallback (uncovered / currency-mismatch / no-import-price).
+  Both figures are MEASURED (Yahoo re-price vs broker frozen) — a source-precedence change, never a
+  MEASURED→EDITORIAL relabel. Left the Company-detail broker strip untouched by design (see runner-up a).
+  Pure/presentational — no scoring/valuation math touched; bundle flat (325.48 kB, +0.04 kB). +1 App render
+  test (real `<App>` + seed CSV + stubbed snapshot: live NVDA Compare card → **+40.00% total** with no Saxo
+  credit and not the frozen +32.00%; unpriced GOOGL → **+16.67% total · from Saxo** fallback, pinning label
+  retention). 333 tests + build green. Invoked the anti-anchoring panel rather than `/frontend-design` since
+  this is a data-provenance fix with zero new visual vocabulary (runs #8/#9 precedent).
+  *Verification note:* per the standing preview-binding constraint the authoritative proof is the
+  rendered-DOM integration test (real App render, real seed, live vs fallback branches both pinned) plus the
+  live-refreshed numeric divergence (+33.39% ledger vs +32.00% frozen Compare), not a screenshot — same
+  approach runs #6/#8/#9 used under the identical constraint.
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this worktree's
+  exact HEAD `be348fbc` on main `69e4beb`) verdict **SHIP** — strictly better, no regression. It confirmed
+  the Compare `const`s are character-for-character the ledger row (so the two live totals cannot diverge),
+  the `isHoldingLive` gate is the shared headline predicate, `toneClass` keys off the displayed value, and
+  no MEASURED↔EDITORIAL relabel; it proved the test NON-VACUOUS by the fixture arithmetic (NVDA factor 138,
+  basis 20700, snapshot 210 → +40.00%, distinct from the frozen +32.00% the old JSX rendered) and that the
+  "· from Saxo" credit survives every non-live fallback; it confirmed the Company-detail broker strip is the
+  correct untouched boundary (frozen % paired with frozen DKK gain under "From Saxo") and no a11y/other-branch
+  regression; and it re-ran the suite itself (333 passed) + build (green). Shipped — **PR #46**
+  (squash-merged to main; auto-deploys to GitHub Pages).
+  *Carry-forward:* the live all-time return now reconciles across the headline NAV, the ledger TOTAL and the
+  Compare card. The ONE remaining surface showing the broker's frozen total is the Company-detail "From Saxo"
+  broker strip (App.tsx:3234-3246) — honest because it is explicitly tagged "From Saxo" and paired with the
+  broker DKK gain (a demoted broker-account island, the differentiate-from-broker guardrail), NOT a
+  same-screen contradiction; do NOT make it live (it would mislabel Yahoo as broker data and desync the DKK
+  pair). Weight recomputation (run #4 P3) still deferred — it touches allocation/scorecard (bigger blast
+  radius); do it as its own coherent run. The freshness-vocabulary unification remains an open, deliberately
+  deferred coherence nicety.
+
 ### 2026-07-01 — live ledger TOTAL column (self-directed run #9)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run8`, pushed early per the concurrency
   hazards below), real `npm run refresh` = 41/41 priced. On arrival I found an ALIVE sibling (run #8):

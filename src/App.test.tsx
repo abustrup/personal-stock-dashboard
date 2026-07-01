@@ -708,6 +708,53 @@ describe("App", () => {
     expect(googl.querySelector(".lt-total")?.textContent).toBe("+16.67%");
   });
 
+  it("shows a live holding's TOTAL on the Compare card with no Saxo credit; a non-live holding keeps the frozen '· from Saxo' figure", async () => {
+    // The Compare card's headline return must mirror the ledger TOTAL column (run #9), so
+    // the SAME name never reads one total on Portfolio and a different one on Compare. A
+    // live holding shows its re-priced all-time return with NO source label (it is Yahoo,
+    // not Saxo — the live ledger figure carries no label either); a holding with no
+    // snapshot falls back to the broker's frozen "% Total afkast", still credited
+    // "· from Saxo". Same isHoldingLive gate and cost basis as the ledger and headline.
+    const snapshot = {
+      generatedAt: new Date().toISOString(),
+      sources: ["Yahoo Finance (keyless prices)"],
+      market: {
+        NVDA: {
+          symbol: "NVDA",
+          price: 210,
+          currency: "USD",
+          previousClose: 205,
+          dayChangePct: 2.44,
+          momentum: 61,
+          asOf: "2026-06-28T18:49:41.386Z",
+        },
+      },
+      signals: {},
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+    render(<App />);
+    await screen.findByText(/LIVE · YHOO/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Compare/ }));
+    // Put the live NVDA against the unpriced GOOGL, deterministically.
+    fireEvent.change(screen.getByLabelText(/First name/i), { target: { value: "NVDA" } });
+    fireEvent.change(screen.getByLabelText(/Second name/i), { target: { value: "GOOGL" } });
+
+    // NVDA is live → the SAME re-priced +40.00% the ledger shows (import price 198 →
+    // factor 138; basis 20700; snapshot 210 → 28980), and NOT the broker's frozen +32.00%
+    // nor a lingering "· from Saxo" credit.
+    const nvda = await screen.findByRole("button", { name: /NVIDIA Corp\..*open detail/i });
+    await waitFor(() => {
+      expect(nvda.querySelector(".cmp-card-return")?.textContent).toBe("+40.00% total");
+    });
+    expect(nvda.querySelector(".cmp-card-return")?.textContent).not.toContain("from Saxo");
+    expect(nvda.querySelector(".cmp-card-return")?.textContent).not.toContain("32.00");
+
+    // GOOGL has no snapshot → not live → the broker's frozen +16.67%, still credited "· from Saxo".
+    const googl = screen.getByRole("button", { name: /Alphabet Inc\..*open detail/i });
+    expect(googl.querySelector(".cmp-card-return")?.textContent).toBe("+16.67% total · from Saxo");
+  });
+
   it("stops claiming LIVE and names the age when the snapshot is stale", async () => {
     const snapshot = {
       // Refreshed three days ago: real Yahoo prices, but no longer current.

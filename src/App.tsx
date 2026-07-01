@@ -2988,6 +2988,15 @@ function CompareCard({
 }) {
   const { company, holding, compliance } = rec;
   const isLeader = leader === side;
+  // Mirror the ledger TOTAL column (run #9): a live holding shows its all-time return
+  // re-priced from the snapshot (liveHoldingReturnPct), else the broker's frozen "%
+  // Total afkast". Same helper, same isHoldingLive gate, same cost basis — so the same
+  // holding reads one number across Portfolio and Compare, never +33.39% here and
+  // +32.00% there. Both are MEASURED (Yahoo re-price vs broker), so this is source
+  // precedence, not a MEASURED→EDITORIAL relabel; the "· from Saxo" credit stays only
+  // on the broker fallback, exactly as the unlabelled live ledger figure does.
+  const liveTotal = holding ? liveHoldingReturnPct(holding, company.market) : undefined;
+  const totalReturn = liveTotal ?? holding?.totalReturnPct;
   return (
     <button
       type="button"
@@ -3008,8 +3017,8 @@ function CompareCard({
         )}
       </div>
       {holding ? (
-        <span className={`cmp-card-return ${toneClass(holding.totalReturnPct)}`}>
-          {formatSignedPct(holding.totalReturnPct)} total · from Saxo
+        <span className={`cmp-card-return ${toneClass(totalReturn)}`}>
+          {formatSignedPct(totalReturn)} total{liveTotal === undefined ? " · from Saxo" : ""}
         </span>
       ) : company.market?.dayChangePct !== undefined ? (
         <span className={`cmp-card-return ${toneClass(company.market.dayChangePct)}`}>
