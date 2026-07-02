@@ -66,6 +66,63 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-02 — ship nothing, deliberately (self-directed run #12)
+- **Assessment:** Fresh isolated worktree (`~/Documents/psd-run12`, `node_modules` symlinked, `auto/run12` pushed
+  intent kept local until commit per the concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals
+  (`generatedAt` 2026-07-02T00:08Z). No open PRs, no remote `auto/*` branches, no live sibling; main clean at `19987a6`
+  (run #11, PR #47). Drove the LIVE app end-to-end across all five surfaces. The preview MCP was again captured by the
+  *main* checkout's dev server on 5180 (the documented run #4/#6/#8–#11 binding hazard) — I confirmed via `lsof` that
+  5180's cwd is the main checkout at HEAD `19987a6` (== my base, NOT a divergent branch, per the run #7 wrong-tree
+  check), synced my fresh gitignored `live-signals.json` into it so I assessed the true LIVE 02:08 state, and did not
+  force the binding. The app is mature and honest: Portfolio (live NAV kr115,573 / +15.67% total / −0.27% today +
+  reconciled ledger TODAY/TOTAL, frozen import WEIGHT column), Opportunities ("11 of 14 buyable … the rest named, not
+  dropped"; off-broker Samsung/SK hynix, over-budget ASML all surfaced), Map (score×risk four-zone, honest risk-index
+  method note), Compare (per-axis MEASURED/EDITORIAL + MODEL'S PICK; NVDA "+31.72% total" reconciled with the ledger,
+  TSM opportunity "−6.98% today" per run #10's owned-vs-opportunity convention), Company (Data/Price/Editorial header,
+  annotated chart, EIFO "cannot be called clean", the deliberately-frozen "FROM SAXO" strip showing broker +16.67% vs
+  the ledger's live +20.40% — honest because explicitly attributed) all remain genuinely distinct — don't consolidate.
+  **This run also added a craft-level clean bill prior runs hadn't explicitly recorded:** console clean; no text
+  clipping and no horizontal page overflow at desktop or 375px (run #7 topbar fix holds); ledger rows are real
+  `<button>`s with `cursor:pointer`; and keyboard focus is comprehensively handled via a single `:focus-visible`
+  rule (`styles.css:4039-4058`) covering every interactive element (`.lt-row/.tab/.cmp-card/.peer-row/.map-dot`, even
+  a negative-offset special case for overflow-clipped queue rows). Judged **trust-first**, I found NO currently-visible
+  provenance/honesty defect, and re-confirmed run #11's finding that the import-frozen weights (ledger WEIGHT,
+  Concentration, theme composition, Map, position-slots, opportunity "% of book") are honestly-sourced MEASURED data
+  with no on-screen contradiction — a coherence (§3) unevenness, not a trust (§1) breach.
+- **Move:** **do-nothing (ship nothing).** To counter my own anchoring (esp. against reflexively repeating run #11's
+  ship-nothing), I ran the routine's anti-anchoring decision panel as an ultracode workflow — 5 distinct lenses
+  (trust / coherence-cold-read / decisiveness / craft-polish-hunter / a dedicated ship-nothing advocate) + a
+  synthesizer, each anchored to this worktree's exact HEAD `19987a6` and required to cite `file:line`, each free to
+  propose (A) a small clearly-good polish, (B) do P3 (live weights) now, or (C) ship nothing. Verdict: **SHIP NOTHING,
+  high confidence** — 4 lenses + the synthesizer unanimously chose C; none proposed a polish that clears the bar. The
+  craft-polish lens errored on the StructuredOutput retry cap (5) *after* the heaviest hunt of the panel (54 tool
+  calls / 118k tokens) with no serializable clears-the-bar polish — itself weak evidence there's no easy craft win — so
+  I filled that one gap with my OWN independent craft pass on the live app (the clean bill above) and likewise found
+  nothing. Candidates rejected: **(A)** labeling only the Concentration rail-brief "from import" — forbidden by the
+  standing don't-retry note (makes the frozen-weight treatment *more* uneven; the ledger WEIGHT column, Opportunities
+  exposure and the Map are equally unlabeled and use the same `portfolioWeight`); freshness-vocabulary unification —
+  the deliberately-deferred coherence nicety (the header chip's current-snapshot time and the "since last refresh"
+  band's diff-baseline time are legitimately different, not a contradiction). **(B)** P3 (live weights) — the genuinely
+  honest full resolution and the standing roadmap item, but it is COHERENCE (§3), not a trust (§1) fix (frozen weights
+  are honest and contradict no on-screen number), and it is the highest-blast-radius change available (threads through
+  App.tsx + `insights/scorecard/allocation/opportunities/map.ts` + `types.ts`/`portfolio.ts`, plus every "measured
+  from your import" label and the frozen FROM-SAXO strip boundary). Per the value order (trust #1 > coherence #3) and
+  the routine's restraint, a high-risk coherence-only refactor with no triggering trust defect does not clear "strictly
+  better, no regression"; runs #9/#10/#11 correctly deferred it and so do I — do it WHOLE as its own run, only when a
+  visible trust defect or a broader design decision pulls it forward. The App.tsx-monolith refactor remains the
+  perennial decline. A regressing or cosmetic-churn change is worse than no change, and velocity is not a value
+  (Charter). Invoked the anti-anchoring panel rather than `/frontend-design` since no UI change was on the table.
+- **Result:** **Shipped nothing** — no product change cleared "strictly better, no regression." Per the routine ("a
+  fresh entry is appended at the end of every run, including ship-nothing runs"), the only deliverable is this journal
+  entry, shipped as a docs-only PR. **PR #_pending — appended on merge._** No app code, tests, or bundle touched
+  (333 tests + build were green on arrival and untouched).
+  *Carry-forward:* run #11's read still holds one day on and one fresh-data assessment later — the live-reconciliation
+  theme is complete, the weights are *consistently* import-frozen and honest, and P3 (live weights, done whole) is the
+  next real coherence move whenever a run decides to take on its blast radius. New this run: the app is also clean at
+  the **craft** level (a11y focus-visible coverage, no clipping/overflow, correct button affordances) — a future craft
+  lens can start from "craft was checked and found clean on 2026-07-02" rather than re-deriving it. When the honest
+  assessment is "the app is strong and no change clears the bar," ship-nothing IS the run — don't manufacture a diff.
+
 ### 2026-07-01 — ship nothing, deliberately (self-directed run #11)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run11`, `node_modules` symlinked, pushed early per the
   concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals. No open PRs, no live sibling (deleted the
