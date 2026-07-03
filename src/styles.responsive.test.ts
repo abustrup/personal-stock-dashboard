@@ -34,3 +34,26 @@ describe("topbar layout at narrow widths", () => {
     expect(rule![0]).toMatch(/flex-wrap:\s*wrap/);
   });
 });
+
+describe("keyboard focus rings on holding-navigation controls", () => {
+  /**
+   * The `:focus-visible` state is a keyboard-only concern jsdom cannot render, so
+   * we pin it at the source. Every button that navigates to a holding's detail —
+   * the ledger row, the reach/peer names, etc. — shares one branded accent ring so
+   * the app speaks a single, consistent keyboard-focus vocabulary. The two
+   * front-page "in your own trades" buttons (`.trades-top-link`, `.trades-leg-name`)
+   * do the same `onSelect(symbol)` navigation, so they must live in that same shared
+   * rule, not fall back to the inconsistent browser-default outline.
+   */
+  const brandedRing = css.match(/\.lt-row:focus-visible,[\s\S]*?\{\s*outline: 2px solid var\(--accent\);[\s\S]*?\}/);
+
+  it("styles the canonical ledger row with the shared accent ring", () => {
+    expect(brandedRing, "expected the shared .lt-row:focus-visible accent-ring rule").not.toBeNull();
+  });
+
+  it("gives the front-page trades navigation buttons the SAME ring as their siblings", () => {
+    // Non-vacuous: dropping either selector from the shared rule fails this.
+    expect(brandedRing![0]).toContain(".trades-top-link:focus-visible");
+    expect(brandedRing![0]).toContain(".trades-leg-name:focus-visible");
+  });
+});

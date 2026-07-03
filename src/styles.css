@@ -4051,6 +4051,8 @@ body > #root {
 .market-chip:focus-visible,
 .reach-name:focus-visible,
 .reach-gap-row:focus-visible,
+.trades-top-link:focus-visible,
+.trades-leg-name:focus-visible,
 .deepdive-link:focus-visible,
 .next-move:focus-visible {
   outline: 2px solid var(--accent);
