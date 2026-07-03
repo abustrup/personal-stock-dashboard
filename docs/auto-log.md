@@ -66,6 +66,68 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-03 — front-page trades buttons keyboard focus ring (self-directed run #13)
+- **Assessment:** Fresh isolated worktree (`~/Documents/psd-run13`, `node_modules` symlinked, `auto/run13` pushed
+  early per the concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals (`generatedAt`
+  2026-07-03T00:08Z). No open PRs, no remote `auto/*` branches, no live sibling; main clean at `d52c1c2` (run #12,
+  PR #48). Cleaned up run #12's orphaned worktree dir + its two stale dev servers (ports 5173/5174, cwd the deleted
+  `psd-run12`). The preview MCP again bound to the *main* checkout's server on 5180 (the documented binding hazard) —
+  confirmed via `lsof` that 5180's cwd is main at HEAD `d52c1c2` (== my base, NOT a divergent branch, per the run #7
+  wrong-tree check), synced my fresh 02:08 `live-signals.json` into it, and assessed the true LIVE state; later I
+  pointed the preview tab at my own worktree server (5175) to verify the fix against my edited CSS. Drove all five
+  surfaces end-to-end: Portfolio (live NAV kr114,127 / +14.23% total / −1.25% today; ledger TOTAL/TODAY live, WEIGHT
+  frozen), Opportunities ("11 of 14 buyable … the rest named", TSM standout, Samsung/SK hynix off-broker, ASML over
+  budget), Map (score×risk four-zone), Compare (NVDA "you own it +29.89% total" reconciles with the ledger row; MODEL'S
+  PICK SK hynix), Company (Data-Backed header, EIFO "cannot be called clean", annotated chart, deliberately-frozen
+  FROM-SAXO strip) all remain genuinely distinct and honest — don't consolidate. **Judged trust-first, I found NO
+  currently-visible provenance/honesty defect.** I quantified the standing P3 (live weights) question concretely: the
+  MAX live-vs-frozen weight drift right now is only **0.80pp** (NVDA 24.33→23.56, SOXX 14.50→13.70; others <0.6pp),
+  weights render to 1 decimal, and NO on-screen number contradicts a frozen weight (no live per-row DKK; the sole live
+  per-holding value is the aggregate NAV). So P3's visible payoff is *sub-rounding-threshold* while it would re-weight
+  the headline BOOK SCORE (scorecard.ts:90) — an invisible gain against real regression risk.
+- **Move:** **polish (craft, value #5).** To counter anchoring (esp. reflexively repeating #11/#12's ship-nothing), I
+  ran the anti-anchoring decision panel as an ultracode workflow — 5 distinct lenses (trust / coherence-cold-read /
+  decisiveness / craft-polish-hunter / a dedicated P3 advocate) + an independent synthesizer, each anchored to HEAD
+  `d52c1c2`, given the 0.80pp drift finding + the standing notes, and required to cite `file:line` and choose A (a named
+  polish) / B (P3 now) / C (ship nothing). Verdict: **4 lenses (trust, coherence, decisiveness, and even the P3
+  advocate) chose C**, all confirming no trust defect and that P3 fails "strictly better, no regression" (sub-rounding
+  payoff, score-re-weighting risk, no reconciliation invariant like the live-NAV work earned). The **craft lens found a
+  real, concrete gap the 2026-07-02 craft pass missed**, and the synthesizer (high confidence) chose it over C because a
+  *verified zero-regression* improvement beats shipping nothing: the two front-page "Your book in your own trades"
+  buttons — `.trades-top-link` (App.tsx:976) and `.trades-leg-name` (App.tsx:998), both real `<button>`s running the
+  same `onSelect(symbol)` holding-detail navigation as `.lt-row`/`.reach-name`/`.peer-row` — were never enrolled in the
+  centralized `:focus-visible` rule (styles.css:4039), so under keyboard nav they fell back to the inconsistent
+  browser-default outline while every functional sibling drew the branded accent ring. Fix: add both selectors to that
+  one shared rule (identical `outline: 2px solid var(--accent); outline-offset: 2px`). The `.muted` variant
+  (App.tsx:1007) is a non-focusable `<span>` so the rule can't match it; no `.trades*` ancestor has `overflow:hidden`
+  so no negative-offset special case is needed (unlike `.next-move`). I independently verified every premise against the
+  code before building, then **proved the fix live via the running app's CSSOM**: all three selectors
+  (`.lt-row`/`.trades-top-link`/`.trades-leg-name`) resolve to the SAME 19-selector accent-ring rule (was 17). Pure CSS
+  — JS bundle flat at 325.48 kB, CSS +0.07 kB. +2 source-assertion guard tests (jsdom can't render `:focus-visible`,
+  per the run #7 precedent), pinning both selectors into the same rule as `.lt-row`; mutation-tested non-vacuous. 335
+  tests + build green. Rejected: **B** (P3) — invisible sub-0.80pp gain vs headline-score re-weighting risk, correctly
+  deferred again; the FORBIDDEN partial "from import" weight label (standing don't-retry); surfacing
+  `scorecard.best/worst` (already the top/bottom ledger rows — redundant clutter); freshness-vocab unification (fixes a
+  non-defect). Invoked the anti-anchoring panel rather than `/frontend-design` since this reuses existing tokens with
+  zero new visual vocabulary (a one-rule enrollment, not a design change).
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this branch's exact HEAD
+  `7b48463`) verdict **SHIP** — strictly better, no regression. It verified all six premises TRUE against the code
+  (real focusable buttons; `.muted` is an unfocusable span; no clipping ancestor; the two selectors precede
+  `.next-move`'s negative-offset override so they get +2px; no `:focus`/hover/layout/logic/data side-effect;
+  craft-only, no trust/EIFO impact), **mutation-tested the guard test non-vacuous** (deleting a selector fails the
+  `.toContain`), and re-ran `npm test` (335 passed) + `npm run build` (green) itself. Shipped — **PR #_pending —
+  appended on merge._**
+  *Carry-forward:* run #12's "craft was checked clean on 2026-07-02" was **not exhaustive** — it missed these two
+  trades buttons' focus ring. Lesson for a future craft lens: when auditing `:focus-visible` coverage, enumerate EVERY
+  rendered `<button>`/focusable and diff it against the centralized rule's selector list (styles.css:4039), don't
+  spot-check; a headless browser can't trip real `:focus-visible` (needs *trusted* keyboard input — synthetic keydown
+  won't do it, even `.lt-row` reads `focusVisible:false`), so verify via the CSSOM (does the selector resolve to the
+  shared accent-ring rule?) + a source-assertion test. The live-price reconciliation theme stays complete; P3 (live
+  weights, done whole) remains the deferred coherence move — and this run *measured* why it keeps deferring: at 0.80pp
+  max drift the payoff is below the 1-decimal display and it re-weights the headline score, so it needs a visible trust
+  defect or a broader design decision to pull it forward, not just "it's the next item." The App.tsx-monolith refactor
+  remains the perennial decline.
+
 ### 2026-07-02 — ship nothing, deliberately (self-directed run #12)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run12`, `node_modules` symlinked, `auto/run12` pushed
   intent kept local until commit per the concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals
