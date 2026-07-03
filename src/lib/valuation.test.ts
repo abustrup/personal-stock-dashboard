@@ -184,6 +184,18 @@ describe("valuePortfolio", () => {
     expect(v.liveDayGainDkk).toBeCloseTo(138, 6);
   });
 
+  it("contributes 0 day-gain for a degenerate −100% day-change instead of ±Infinity-poisoning the book", () => {
+    const v = valuePortfolio([
+      rec({ symbol: "UP", market: { price: 102, previousClose: 100 } }), // +2% → dayGain (102 − 100) × 69 = 138
+      // dayChangePct −100 ⇒ implied prevClose = 50 / 0 = Infinity: unusable, must contribute 0.
+      rec({ symbol: "DEAD", market: { price: 50, dayChangePct: -100, previousClose: undefined } }),
+    ]);
+    expect(v.covered).toBe(2); // the −100% row is still live-priced for value…
+    expect(Number.isFinite(v.liveDayGainDkk)).toBe(true); // …but its degenerate day-change can't poison the sum
+    expect(v.liveDayGainDkk).toBeCloseTo(138, 6);
+    expect(Number.isFinite(v.liveDayPct)).toBe(true);
+  });
+
   it("falls back to the imported value when a holding has no live snapshot", () => {
     const v = valuePortfolio([rec({ symbol: "AAA", market: null, holding: { totalGainDkk: 900, dayGainDkk: 12 } })]);
     expect(v.liveValueDkk).toBe(6900); // imported, unchanged
