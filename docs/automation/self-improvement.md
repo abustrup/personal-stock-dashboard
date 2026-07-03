@@ -9,6 +9,23 @@ This file **is** the routine. The scheduled job's only prompt is "read and follo
 `docs/automation/self-improvement.md`". Edit this file to change how the routine works;
 edit [`CHARTER.md`](../../CHARTER.md) to change what it's aiming for.
 
+## This is the *only* unattended maintainer for this repo
+
+There is exactly one autonomous maintainer pass on this repo — the daily
+`dashboard-self-improve` job that runs this spec. That is deliberate. The guardrails below
+(trust & honesty first, EIFO safety, the MEASURED-vs-EDITORIAL line, adversarial review
+before merge, and continuity through `docs/auto-log.md`) are what make an *auto-merging*
+routine safe on a **public** repo — and they only bind a routine that reads this file.
+
+A second, generic "do maintenance / improve structure, auto-merge if low-risk" routine ran
+daily in parallel and was **retired on 2026-07-03**. It carried none of these guardrails,
+worked from a stale separate checkout, and over ~3 days produced only unmerged
+`maintenance/*` branches — one of them a rewrite of `App.tsx` dozens of commits behind
+`main`, i.e. exactly the monolith rewrite this routine repeatedly and correctly declines —
+rather than a single shipped improvement. If you want more maintenance throughput, raise
+*this* routine's cadence; don't add a parallel unguarded one. (Those stale `maintenance/*`
+branches can be pruned — they were never merged.)
+
 ## What this routine is for
 
 Ship **one** genuinely-useful improvement to the dashboard's **visual quality** or
