@@ -129,12 +129,21 @@ export function valuePortfolio(portfolio: Recommendation[]): LiveValuation {
 
     if (isLive && market && factor !== undefined) {
       const value = market.price * factor;
-      const prevClose =
+      const impliedPrevClose =
         market.previousClose !== undefined && market.previousClose > 0
           ? market.previousClose
           : market.dayChangePct !== undefined
             ? market.price / (1 + market.dayChangePct / 100)
             : undefined;
+      // A degenerate day-change (e.g. −100%, denominator 0 → ±Infinity) or a
+      // non-positive implied close would otherwise poison the whole book's summed
+      // day P&L into ±Infinity/NaN. Require a finite, positive previous close —
+      // symmetric with the previousClose > 0 guard above — else this row
+      // contributes 0 rather than dragging the headline down with it.
+      const prevClose =
+        impliedPrevClose !== undefined && Number.isFinite(impliedPrevClose) && impliedPrevClose > 0
+          ? impliedPrevClose
+          : undefined;
       liveValueDkk += value;
       liveGainDkk += value - basis;
       liveDayGainDkk += prevClose !== undefined ? (market.price - prevClose) * factor : 0;
