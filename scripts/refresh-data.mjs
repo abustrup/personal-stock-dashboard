@@ -231,7 +231,14 @@ async function fetchAlphaVantageNews(symbol, apiKey) {
   try {
     const response = await fetch(url);
     const data = await response.json();
-    const feed = Array.isArray(data.feed) ? data.feed.slice(0, 8) : [];
+    // A throttled request answers HTTP 200 with { Information: "...rate limit..." }
+    // and no feed. Without this guard that empty body becomes a neutral 50 stamped
+    // freshness:"live" — throttled/absent data presented as MEASURED sentiment,
+    // which the charter forbids. Fail loudly so the catch downgrades to "missing".
+    if (!response.ok || !Array.isArray(data.feed)) {
+      throw new Error(data.Information ?? data.Note ?? `HTTP ${response.status}`);
+    }
+    const feed = data.feed.slice(0, 8);
     const tickerSentiments = feed.flatMap((item) => item.ticker_sentiment ?? []);
     const relevant = tickerSentiments.filter((item) => item.ticker === symbol);
     const avg =
@@ -265,7 +272,14 @@ async function fetchFinnhubRecommendation(symbol, apiKey) {
   try {
     const response = await fetch(url);
     const data = await response.json();
-    const latest = Array.isArray(data) ? data[0] : undefined;
+    // Finnhub answers a throttled/erroring request with a non-array body (e.g.
+    // { error: "..." }), sometimes still HTTP 200. Guard so that only a real
+    // recommendation array is ever reported freshness:"live" (an empty [] is a
+    // valid live "no trend" answer and still passes).
+    if (!response.ok || !Array.isArray(data)) {
+      throw new Error(data?.error ?? `HTTP ${response.status}`);
+    }
+    const latest = data[0];
     const positive = Number(latest?.strongBuy ?? 0) + Number(latest?.buy ?? 0);
     const negative = Number(latest?.sell ?? 0) + Number(latest?.strongSell ?? 0);
     const direction = positive > negative ? "positive" : negative > positive ? "negative" : "neutral";
