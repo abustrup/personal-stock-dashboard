@@ -178,7 +178,11 @@ function changeForName(
         kind: "price",
         measured: true,
         direction: pct >= 0 ? "up" : "down",
-        weight: 100 + Math.abs(pct),
+        // Cap the magnitude term so even a glitched feed (an unadjusted split or
+        // reverse-split print can read as a several-hundred-percent move) stays
+        // below the 1000 verdict floor: a changed call must always outrank a raw
+        // price move, whatever the feed prints. |pct|≤800 ⇒ weight≤900 < 1000.
+        weight: 100 + Math.min(Math.abs(pct), 800),
         pricePct: pct,
       });
     }
