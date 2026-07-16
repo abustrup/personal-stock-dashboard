@@ -66,6 +66,24 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-16 — snapshot entries array-tamper guard (scheduled maintenance run)
+- **Assessment:** Re-baselined off `origin/main` (`9592bd9`, PR #52). Three shipped-but-unmerged
+  PRs pending user merge (#53 provider-throttle honesty, #54 verdict-weight cap, #55 universe
+  ×2) — nothing to redo there. The 2026-07-10 robustness backlog had two items left; both
+  verified still live on `main`: (3) `parseStoredSnapshot` accepts an array for `entries`
+  (`typeof [] === "object"`), and (4) `trailingMonthLabels` month-end day-overflow. Per the
+  one-coherent-change rule, took (3) — the higher-priority one: a tampered baseline payload
+  silently yields a false "nothing changed" digest (`hasBaseline:true, changes:[]`), which is
+  a trust defect; (4) is a cosmetic axis-label edge on the 31st and stays in the backlog.
+- **Move:** add `Array.isArray(parsed.entries)` to the rejection guard (mirror of
+  `parseStoredPortfolio`'s), + a regression test proven red-without-fix / green-with-fix.
+  A 3-lens adversarial verify panel (refute-correctness, mutation check, consumer-regression
+  trace) all passed: the sole consumer chain (`loadChangeBaseline` → `App.tsx`) already treats
+  `undefined` as the honest "tracking from now" path, and no other parser in `src/` shares the
+  typeof-object hole. 337/337 tests, build green.
+- **Result:** shipped — PR #56, CI-gated, handed to the user to merge (self-merge is denied
+  by policy). Backlog remaining: item (4) `trailingMonthLabels` day-pinned month step.
+
 ### 2026-07-03 — front-page trades buttons keyboard focus ring (self-directed run #13)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run13`, `node_modules` symlinked, `auto/run13` pushed
   early per the concurrency hazards), real `npm run refresh` = 41/41 priced + fundamentals (`generatedAt`

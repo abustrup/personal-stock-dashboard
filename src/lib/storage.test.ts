@@ -64,4 +64,13 @@ describe("change-baseline storage", () => {
     expect(parseStoredSnapshot(JSON.stringify({ version: 1, entries: {} }))).toBeUndefined();
     expect(parseStoredSnapshot(JSON.stringify({ version: 1, asOf: "x" }))).toBeUndefined();
   });
+
+  it("rejects an array where the entries record is expected", () => {
+    // typeof [] === "object": without an explicit Array.isArray guard a tampered
+    // payload parses as an empty baseline and the digest reports "nothing changed".
+    expect(parseStoredSnapshot(JSON.stringify({ version: 1, asOf: "x", entries: [] }))).toBeUndefined();
+    expect(
+      parseStoredSnapshot(JSON.stringify({ version: 1, asOf: "x", entries: [{ action: "watch" }] })),
+    ).toBeUndefined();
+  });
 });
