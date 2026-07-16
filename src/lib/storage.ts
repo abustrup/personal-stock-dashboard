@@ -78,7 +78,14 @@ export function parseStoredSnapshot(raw: string | null | undefined): ModelSnapsh
   try {
     const parsed = JSON.parse(raw) as Partial<ModelSnapshot> & { version?: number };
     if (parsed?.version !== 1) return undefined;
-    if (typeof parsed.asOf !== "string" || typeof parsed.entries !== "object" || parsed.entries === null) {
+    // entries must be a keyed record; typeof [] === "object", so reject arrays
+    // explicitly or a tampered payload reads as an empty baseline ("nothing changed").
+    if (
+      typeof parsed.asOf !== "string" ||
+      typeof parsed.entries !== "object" ||
+      parsed.entries === null ||
+      Array.isArray(parsed.entries)
+    ) {
       return undefined;
     }
     return { asOf: parsed.asOf, entries: parsed.entries as ModelSnapshot["entries"] };
