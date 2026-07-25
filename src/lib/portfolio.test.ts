@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDanishNumber, parsePortfolioCsv, providerSymbol } from "./portfolio";
+import { parseStoredPortfolio, serializePortfolio } from "./storage";
 
 // Synthetic fixture (not real positions). Exercises the BOM, the skipped broker
 // summary row, comma decimals, weight-as-fraction and the P&L columns.
@@ -56,6 +57,41 @@ describe("parsePortfolioCsv", () => {
     expect(result.totalMarketValueDkk).toBeCloseTo(100.0);
     // Missing weight column → 0, never NaN.
     expect(result.holdings[0].portfolioWeight).toBe(0);
+    // The row itself must agree with the total, which already counts it as 0.
+    // A NaN here would render "DKK NaN" on every screen that shows the position.
+    expect(result.holdings[1].marketValueDkk).toBe(0);
+  });
+
+  // The stored-payload half of the same defect, and the more damaging one: NaN
+  // has no JSON representation, so serializePortfolio writes it as null and
+  // parseStoredPortfolio's number check then rejects the ENTIRE payload — the
+  // reader's real import is silently swapped for the demo book on the next
+  // visit. Guarding the field at parse time is what keeps the payload loadable.
+  it("keeps the saved import loadable when one market-value cell is unparseable", () => {
+    // A dash, where the test above uses "n/a" — both are sentinels this broker
+    // writes for a cell it has no number for, and both parse to NaN.
+    const bad =
+      '﻿"Instrument","Antal","Aktuel kurs","Markedsværdi (DKK)","Symbol","ISIN"\n' +
+      '"Good A/S","1","10","100.00","GOOD:xnas","US0000000001"\n' +
+      '"Bad A/S","1","10","-","BAD:xnas","US0000000002"';
+    const { holdings } = parsePortfolioCsv(bad);
+
+    const raw = serializePortfolio(holdings, "bad.csv", "2026-07-25T10:00:00.000Z");
+    // It survives the round trip precisely because the field is guarded at parse
+    // time; an unguarded NaN would sit here as null.
+    expect(JSON.parse(raw).holdings[1].marketValueDkk).toBe(0);
+
+    const restored = parseStoredPortfolio(raw);
+    expect(restored?.holdings).toHaveLength(2);
+    expect(restored?.holdings[0].marketValueDkk).toBeCloseTo(100.0);
+
+    // And the counterfactual, so the line above can't quietly stop meaning
+    // anything: a null in that slot still costs the reader the WHOLE payload —
+    // the good holding included — which is what makes the parse-time guard the
+    // thing keeping the import alive.
+    const withNull = raw.replace('"marketValueDkk":0', '"marketValueDkk":null');
+    expect(withNull).not.toBe(raw);
+    expect(parseStoredPortfolio(withNull)).toBeUndefined();
   });
 });
 
