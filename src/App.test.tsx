@@ -516,8 +516,12 @@ describe("App", () => {
     render(<App />);
     await screen.findByText(/LIVE · YHOO/i);
 
-    // The trailing-year badge reports the series' own measured move…
-    const sparkHead = await screen.findByText(/portfolio · trailing 12 months/i);
+    // The head must name what the line actually plots — today's share counts priced
+    // back a year (buildPortfolioSeries scales each leg by importFxFactor, a frozen
+    // share count × import FX) — never the possessive "Portfolio", which claims an
+    // account history the positions-only import (no trade dates) cannot support.
+    const sparkHead = await screen.findByText(/today's holdings · 12 months/i);
+    expect(screen.queryByText(/portfolio · trailing 12 months/i)).toBeNull();
     const badge = sparkHead.parentElement!.querySelector(".total");
     await waitFor(() => expect(badge).toHaveTextContent("+10.00%"));
 

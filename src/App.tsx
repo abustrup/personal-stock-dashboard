@@ -699,6 +699,18 @@ function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number })
   // summarizeTrend reads the SAME cleaned series buildPriceChart plots, so the badge
   // can never disagree with the line it sits on. Omitted (no badge) in demo mode,
   // where there is no fetched history and so no honest trailing move to state.
+  //
+  // The head names TODAY'S HOLDINGS, not "the portfolio", because that is literally
+  // what the line plots: buildPortfolioSeries scales each leg's native history by
+  // importFxFactor (marketValueDkk / currentPrice ≈ a FROZEN share count × import FX),
+  // so the series is today's exact share counts projected back a year — a
+  // constant-holdings reconstruction, not the account's own path. The import is a
+  // positions CSV with no trade dates (lib/portfolio.ts, lib/types.ts), so a true
+  // historical NAV is not computable; the honest move is to name the basis rather
+  // than fake a better one. "Portfolio" asserted an ownership history the data cannot
+  // support — it silently credits the owner with, e.g., MSFT's trailing-year slide on
+  // a screen where the ledger says they are up on MSFT. The window word is carried by
+  // the axis below (AUG '25 → JUL '26), so the head states only the subject.
   const trend = series && series.length >= 2 ? summarizeTrend(series) : undefined;
   const chart = trend ? buildPriceChart(series!, SPARK_DIMS) : undefined;
   const [startLabel, endLabel] = trailingMonthLabels();
@@ -706,7 +718,7 @@ function NavSpark({ series, totalPct }: { series?: number[]; totalPct: number })
   return (
     <div className="nav-spark">
       <div className="nav-spark-head">
-        <span>Portfolio · trailing 12 months</span>
+        <span>Today&apos;s holdings · 12 months</span>
         {trend && (
           <span className={`total ${trend.rising ? "tone-up" : "tone-down"}`}>{formatSignedPct(trend.changePct)}</span>
         )}
