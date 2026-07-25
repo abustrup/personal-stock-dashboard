@@ -44,7 +44,9 @@ export function parsePortfolioCsv(input: string): PortfolioParseResult {
   return {
     holdings,
     skippedRows: rows.length - holdings.length,
-    // A single unparseable cell must not poison the portfolio total.
+    // Belt and braces: toHolding already guarantees a finite marketValueDkk, so
+    // this only matters if that ever regresses — but this is the one place where
+    // a single row can poison a whole-book number, so the guard stays.
     totalMarketValueDkk: holdings.reduce(
       (sum, holding) => sum + (Number.isFinite(holding.marketValueDkk) ? holding.marketValueDkk : 0),
       0,
@@ -74,7 +76,11 @@ function toHolding(row: CsvRow): Holding {
     currentPrice: parseDanishNumber(value(row, "Aktuel kurs")),
     costPrice: optionalNumber(value(row, "Kostpris")),
     openingPrice: optionalNumber(value(row, "Åbningskurs")),
-    marketValueDkk: parseDanishNumber(value(row, "Markedsværdi (DKK)")),
+    // Missing/blank cell → 0 rather than NaN, the same policy as the weight
+    // below. A NaN here does more than print "DKK NaN" — it has no JSON form, so
+    // the saved payload stores null and fails the shape check on the way back in
+    // (storage.ts), discarding the reader's whole import, not just this row.
+    marketValueDkk: optionalNumber(value(row, "Markedsværdi (DKK)")) ?? 0,
     costBasisDkk: optionalNumber(value(row, "Oprindelig værdi (DKK)")),
     totalGainDkk: optionalNumber(value(row, "Gevinst/Tab i alt (DKK)")),
     totalReturnPct: optionalNumber(value(row, "% Total afkast")),
