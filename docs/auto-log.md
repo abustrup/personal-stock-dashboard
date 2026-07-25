@@ -106,6 +106,59 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-25 — one bad CSV cell no longer discards the whole import (scheduled maintenance run)
+- **Assessment:** The 13:00 `stock---do-maintenance-improve-structure` task — the one run #14's governance
+  note above describes as nominally "RETIRED" but still enabled. Read that note first and **followed its
+  instruction**: report, don't self-disable, don't close anyone's PRs. Re-baselined off `origin/main`; note
+  that main moved *mid-run* (`9592bd9` → `b2232eb`, run #14's PR #57) and this branch was rebased onto it
+  before pushing — a future run should re-check `origin/main` right before it pushes, not only at start.
+  Open PRs unchanged at six on arrival (#49, #53, #54, #55, #56, and now this one); nothing here redoes any
+  of them. Chose a *differentiated* target via a 5-lens survey + adversarial refute pass (13 agents, every
+  lens anchored to the exact HEAD and pre-loaded with the five open-PR diffs and the standing don't-retry
+  notes so it could not re-propose claimed work). Nineteen raw candidates, four survived refutation; three
+  were declined as latent-only or off-bar (a `providerSymbol` join gap in `dashboard.ts` — real, but its fix
+  flips a holding's app-wide identity key and needs its own run; the `GBp`-vs-`GBP` pence fold in
+  `investability.ts` — real but unreachable without a manual `npm run refresh -- <LSE ticker>`; a second
+  cost-basis rule in `dashboard.ts:49` — real, one line, a good next pick). **The winner was the only one
+  reachable from the app's own front door**, the Import CSV button.
+- **Move:** fix (trust, value #1). `parseDanishNumber` returns NaN for a blank / `-` / `n/a` cell, and
+  `marketValueDkk` was taking it raw while the fields either side were already guarded — the book total
+  (`Number.isFinite`, `portfolio.ts:47-51`) and `portfolioWeight` two lines below ("Missing/blank column → 0
+  rather than NaN"). So the guard policy was already written down twice; the required field between them
+  just never got it. Two consequences, and the review panel proved the second is the serious one:
+  (a) the sums that actually feed the screen are *not* guarded (`dashboard.ts` `sum()`, `valuation.ts`
+  `importedValueDkk +=`), so one bad cell put **"DKK NaN" on the headline NAV**, and silently reported
+  0.00% today and 0% covered weight (`NaN > 0` is false); (b) NaN has no JSON form — `savePortfolio` writes
+  `null`, `parseStoredPortfolio`'s `typeof … === "number"` check then rejects the **entire** payload (good
+  holdings included), and the next visit falls back to the **demo book**. One malformed cell and the reader
+  is quietly looking at fictional positions. Fix is `optionalNumber(...) ?? 0` — the existing helper, the
+  existing policy, and the same figure the book total already attributed to that row, so the row and the
+  total now agree instead of disagreeing. Bit-identical for every parseable input (`??` never fires on 0;
+  a legitimate zero and `-0` survive); only NaN/±Infinity change, both already broken.
+- **Result:** 4-lens adversarial panel (refute-correctness / consumer-regression trace / honesty-charter /
+  scope-and-conflicts) + an independent synthesizer, all anchored to the exact tree: **unanimous ship**,
+  high confidence. The honesty lens argued the strongest anti-case — coercing an unknown MEASURED cell to a
+  fabricated `0` is exactly what §1 forbids — and then *lost on its own terms*: `skippedRows` is produced
+  but rendered nowhere, so routing the row there would vanish a real position with zero signal; making the
+  field optional is a schema change (`types.ts`, the `storage.ts` shape contract, ~10 consumers) wearing a
+  bug-fix costume; and the true comparison is not `0`-vs-`NaN` but "one coerced scalar" vs "a demo book
+  replacing the reader's real one on the next visit". Both new tests mutation-proven red without the fix
+  ("expected null to be +0"). 337 tests + build green, bundle flat (325.54 kB). Shipped — **PR #_pending —
+  appended on merge._** Not self-merged: per the standing precedent this routine's own PRs go to the owner
+  with green CI, and run #14's note makes auto-merge on a public auto-deploying repo an owner decision.
+  *Carry-forward:* (1) **`storage.ts:24-28` is the reader half of this same defect and is still unsafe** —
+  `typeof … === "number"` is simultaneously too lax (an in-memory NaN passes) and too strict (one `null`
+  discards the whole payload). `Number.isFinite` + per-holding rejection would make *any* future NaN source
+  survivable; it collides with PR #56's branch, so do it after that merges. (2) `valuation.ts:123-124` sums
+  the reconstructed cost basis with no `> 0` guard, unlike `liveHoldingReturnPct` at `:98`. (3) `quantity`
+  and `currentPrice` (`portfolio.ts:73-74`) still take the raw parser — same class, milder blast radius,
+  deliberately out of scope here. (4) `dashboard.ts:49`'s second cost-basis rule is the best-verified
+  unclaimed one-liner left. *Environment addendum to run #14's note:* the canonical checkout was **usable**
+  this run, just degraded — `npm test` ran fine but `npm run build` took **5m50s** while sibling agents held
+  ~70 concurrent `vitest` workers and `fileproviderd` sat pegged. So "slow" is not automatically the
+  dataless-eviction failure; check `ls -lO node_modules/vite/` before assuming, and don't run the suite in
+  several subagents at once on this machine.
+
 ### 2026-07-25 — name the hero sparkline what it actually plots (self-directed run #14)
 - **Assessment:** First run since 2026-07-03 (#13). Setup cost most of this run and produced a finding worth more than
   the code change: the canonical checkout is on **iCloud-evicted storage** and `npm test`/`npm run build`/`vite`/
