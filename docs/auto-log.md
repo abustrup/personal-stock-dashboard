@@ -64,7 +64,119 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   NAV — one coherent, higher-blast-radius run touching all ~7 weight surfaces + allocation/scorecard together, not a
   per-card label. Do P3 whole, or leave the weights consistently import-frozen; don't patch one card.
 
+- **The hero sparkline head is DONE — don't rename it again, and don't add a caption under it (run #14).**
+  Run #2 fixed the BADGE (it reports `summarizeTrend(series).changePct`, the plotted line's own endpoints, not the
+  all-time total). Run #14 fixed the HEAD: "Portfolio · trailing 12 months" → **"Today's holdings · 12 months"**,
+  because `buildPortfolioSeries` (App.tsx ~1636-1656) scales native history by `importFxFactor` =
+  `marketValueDkk / currentPrice` ≈ a FROZEN share count × import FX — i.e. a constant-holdings backtest — and
+  "Portfolio" asserted an account history the positions-only CSV (`portfolio.ts`, `types.ts`, no trade dates) cannot
+  support. "Trailing" is deliberately dropped: the axis directly beneath already renders the window (AUG '25 → JUL '26)
+  via `trailingMonthLabels()`, and the shorter string measured 193px vs a 223px budget at 375px (30px slack, vs 15px
+  for the old label) — so it is *more* wrap-robust, not less. Both honesty properties are pinned by the single test at
+  `App.test.tsx` ~487-527 (positive matcher + negative assertion, each mutation-proven load-bearing). A future trust
+  lens will be tempted to ALSO add a prose method note under the axis — **don't**: the head already names the basis,
+  and a caption would be the hero's only modelling disclaimer, the run #11 unevenness trap in a new costume.
+
+- **ENVIRONMENT — the checkout at `~/Documents/personal-stock-dashboard` can be UNUSABLE, and the symptom lies.**
+  `~/Documents` is iCloud-synced with Optimize Storage, and run #14 found **4,760 files in `node_modules` flagged
+  `compressed,dataless`** (evicted placeholders; also 334 in `.git`, 32 in `src`). Any tool that walks the dependency
+  tree — `vite`, `vitest`, `npm test`, `npm run build`, `git worktree add` — then blocks *forever* on per-file cloud
+  fetches. **The signature is a live process at ~0.00s CPU**: it looks "slow" or "hung" but it is blocked on I/O, and
+  `dangerouslyDisableSandbox` does NOT help because the sandbox is not the cause. `brctl download` was a no-op.
+  Reading 300 `node_modules` files took >3 minutes; `git worktree add` died at a consistent ~40/90 files in *two
+  different filesystems*. **The fix that works: `git clone` fresh from GitHub into a NON-iCloud path (run #14 used the
+  session scratchpad under `/private/tmp`) and `npm ci` there** — after which the identical suite ran 336 tests in
+  3.4s and `vite` was ready in 131ms. Don't burn a run re-diagnosing this: if npm/git hangs, check
+  `ls -lO node_modules/vite/` for `dataless` first. Two further gotchas from the same run: always use
+  `git --no-pager` (a pager hangs the tool shell), and this machine has **no git credential helper** configured, so
+  plain `git fetch/push` over HTTPS hangs waiting on a nonexistent TTY — use
+  `git -c credential.helper='!gh auth git-credential' …`.
+
+- **GOVERNANCE — the "retired" unguarded routine was never actually disabled (found by run #14).** The scheduled task
+  `stock---do-maintenance-improve-structure` (cron `0 13 * * *`) carries a description beginning "RETIRED 2026-07-03"
+  but its **`enabled` flag is still `true`**, and it ran as recently as 2026-07-25T13:11Z. The retirement
+  `self-improvement.md` records was documentation-only. Consequences visible on the repo: it **merged PR #52 to
+  `main`** on 2026-07-10 (contradicting that doc's claim it "produced only unmerged `maintenance/*` branches"), and
+  left PRs **#53, #54, #55, #56 and #49 open**. Reviewed on their merits those PRs are *not* junk — #53 in particular
+  fixes a genuine MEASURED-vs-EDITORIAL hole (a throttled Alpha Vantage/Finnhub response coerced into
+  `sentiment: 50, freshness: "live"`, which `recommendations.ts` then labels measured) — but they are produced by a
+  routine carrying none of this one's guardrails, on a public repo, with auto-merge. **This is an owner decision, not
+  a routine's**: a run should REPORT it, not silently disable the task or close the PRs. If the owner wants that
+  throughput, raise this routine's cadence or re-enable that one deliberately with guardrails.
+
 ## Runs (most recent first)
+
+### 2026-07-25 — name the hero sparkline what it actually plots (self-directed run #14)
+- **Assessment:** First run since 2026-07-03 (#13). Setup cost most of this run and produced a finding worth more than
+  the code change: the canonical checkout is on **iCloud-evicted storage** and `npm test`/`npm run build`/`vite`/
+  `git worktree add` all block forever there at ~0 CPU — see the new standing ENVIRONMENT note, which should stop a
+  future run losing the same hour. Recovered by cloning fresh from GitHub into the non-iCloud scratchpad + `npm ci`;
+  after that, baseline **336 tests in 3.4s + build green (325.53 kB)**, real `npm run refresh` = **41/41 priced +
+  fundamentals** (`generatedAt` 2026-07-25T13:11Z), dev server on 5188 bound to MY tree (so the preview-binding hazard
+  runs #4–#13 fought did not apply). Drove all five surfaces on a genuinely brutal live tape (book −4.44%, TSLA
+  −16.30%, GOOGL −6.53% — verified real Yahoo data, not a feed glitch): Portfolio, Opportunities ("11 of 14 buyable …
+  the rest named, not dropped"), Map, Compare, Company (EIFO "cannot be called clean", frozen FROM-SAXO strip) all
+  remain genuinely distinct and honest — **don't consolidate**. Run #8's reconciliation still holds: the ledger TODAY
+  column weight-averages to −4.60% against the −4.44% headline. **The one currently-visible §1 defect was in the hero
+  itself**: the sparkline read "PORTFOLIO · TRAILING 12 MONTHS **+25.27%**" directly beside "**+10.23%** total" — two
+  portfolio-level returns ~15pp apart with no stated reason. I reproduced the series numerically before proposing
+  anything: it runs kr87,917 → kr110,136 (= the badge to the basis point), its right endpoint equals the live NAV
+  exactly, and its left endpoint is a value the account never held (cost basis kr99,912). The line is a
+  **constant-holdings backtest** — today's exact share counts projected back a year — because `importFxFactor` is a
+  frozen share count × import FX. "Portfolio" claimed an ownership history the positions-only import cannot support;
+  it silently credited the owner with MSFT's −25.70% trailing year on a screen where the ledger says they are +6.03%
+  on MSFT. Also noted: the app is otherwise scrupulous about exactly this (`converted at your import's FX`,
+  `as imported`, `Measured DKK only, no FX`, the Company chart's method note, `FROM SAXO`) — the hero sparkline was
+  the *only* chart with no method statement, so naming its basis makes the treatment **more** even, the precise
+  inverse of run #11's disqualifier.
+- **Move:** **polish (trust, value #1).** Ran the anti-anchoring panel as an ultracode workflow — 5 lenses (trust /
+  coherence-cold-read / decisiveness / craft-polish-hunter / a dedicated ship-nothing advocate) + an independent
+  synthesizer, each anchored to HEAD `9592bd9` and required to cite `file:line`. Split verdict, which is the point:
+  2×B (fix the sparkline), 2×A (unrelated finds), 1×C — and **even the ship-nothing advocate led with the sparkline as
+  the most disappointing thing on the front page**, conceding "if the panel judges reader-belief rather than
+  statement-truth, B wins and I am wrong." The synthesizer chose B in its **rename** form over the caption form, and I
+  agree: a caption *apologises* for a number; a rename *states what it is about*. Shipped
+  `Portfolio · trailing 12 months` → **`Today's holdings · 12 months`** at App.tsx:721 — same slot, no caption, no new
+  markup, no new CSS, no new vocabulary, no math touched. This is the run #5 (`LIVE` over a stale snapshot) / run #6
+  (`Live prices` → `Snapshot prices`) shape: re-word a label claiming more than the data supports; it is NOT a
+  MEASURED→EDITORIAL relabel ("Today's holdings" is a *subject* descriptor; provenance still lives in `.nav-prov`).
+  I invoked `/frontend-design` for the copy and it resolved the wording on principle — *a label's one job is to label*
+  — which is why "trailing" is gone: the axis beneath already states AUG '25 → JUL '26, so the head states only the
+  subject. **Measured in the real DOM rather than estimated** (both the trust lens's and the synthesizer's width
+  estimates were wrong — their preferred strings would have *wrapped*): at 375px the shipped label renders **193px
+  against a 223px budget (30px slack, vs 15px for the old string)**, single row, baseline-aligned, zero page overflow.
+  Run #2's badge fix is untouched. +2 assertions on the existing test (positive matcher + negative assertion), both
+  mutation-proven load-bearing. 336 tests + build green; JS bundle flat 325.53 kB, CSS byte-identical.
+  Rejected: the **caption** form (restraint #3 — the rename is the free version of the identical fix); the craft
+  lens's `.upload` focus fix and the decisiveness lens's dead rail-brief button (**both VERIFIED REAL — carried
+  forward below**; craft #5 and clarity #2 yield to a live trust #1 defect, and only one move ships per run);
+  **P3 live weights** (standing don't-retry honoured — no new evidence; a lens's "2.14pp drift" is an artifact of the
+  fictional sample CSV, not real drift); the Concentration label (forbidden); the App.tsx-monolith refactor (perennial).
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this branch's exact HEAD
+  `608e592`) verdict **SHIP** — strictly better, no regression. It reproduced **every** figure independently
+  (87,917 → 110,136, +25.2727%, cost basis 99,912 → +10.2331%, MSFT −25.70% vs ledger +6.03%), confirmed the factors
+  are exactly `shares × 6.9` (frozen count × frozen FX), found no MEASURED↔EDITORIAL relabel, no stale reference to
+  the old string anywhere, no a11y regression (the `<svg>` is `aria-hidden`, so this span *is* the chart's accessible
+  description and now describes it accurately), and mutation-tested **both** assertions — including the negative one,
+  which my own mutation didn't reach because it throws first. It re-ran the suite (336) + build itself. Shipped —
+  **PR #_pending — appended on merge._**
+  *Carry-forward — two VERIFIED A-class candidates for run #15, both live right now:*
+  (1) **`.upload:focus-visible` (styles.css:4044) is an INERT selector.** `.upload` is a `<label>` (App.tsx:500) with
+  no tabIndex, so it can never match `:focus-visible`; the only focusable node is its `<input type="file">`, styled
+  `position:absolute; width:1px; height:1px; opacity:0` (styles.css:210-216) — and `opacity:0` does **not** remove it
+  from the tab order. I proved this in the live DOM: the input **is** focusable, and **zero** rules target
+  `.upload input:focus-visible`. So tabbing the topbar, the app's only data-entry control shows *no* focus indicator
+  while its sibling `.ghost` Reset draws the branded ring — strictly worse than the gap run #13 shipped (that one at
+  least got the browser default). Note the proposed `:has()` fix would be the first `:has()` in styles.css.
+  (2) **A dead rail-brief button.** `RailBrief` always renders a `<button>` (App.tsx:1434) with `cursor:pointer` and a
+  hover accent (styles.css:1289-1294), but the needs-attention and EIFO call sites pass
+  `onSelect(x?.company.symbol ?? "")` (App.tsx:909, :933) and `open()` bails on falsy (App.tsx:382-383) — so on any
+  clean-compliance day (today: "None flagged") it is a focusable, pointer-cursored tab stop that swallows the click.
+  Unlike run #13's case this one **is** testable in jsdom. Also: `.map-dot`/`.map-mark` CSS (styles.css:4066-4076) is
+  dead — zero hits in `src/`.
+  *Also recorded as standing notes above:* the ENVIRONMENT fault (iCloud-evicted `node_modules`) and the GOVERNANCE
+  finding that the "retired" unguarded routine is still `enabled: true`, merged PR #52 to main, and has five PRs open.
+  The latter is reported, deliberately not acted on — disabling an owner's scheduled task is the owner's call.
 
 ### 2026-07-03 — front-page trades buttons keyboard focus ring (self-directed run #13)
 - **Assessment:** Fresh isolated worktree (`~/Documents/psd-run13`, `node_modules` symlinked, `auto/run13` pushed
