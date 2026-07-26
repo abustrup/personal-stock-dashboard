@@ -109,6 +109,13 @@ describe("add / remove", () => {
       ok: false,
       error: "owned",
     });
+    // The owned set must carry BOTH identities of a holding. The picker offers the
+    // Nordic/European names by their provider form, and the dashboard suppresses
+    // that form too — so recognising only the bare "VWS" here would produce exactly
+    // the chip-with-no-card this rejection exists to prevent.
+    expect(
+      addWatchEntry([], { name: "Vestas", symbol: "VWS.CO" }, "t", new Set(), new Set(["VWS", "VWS.CO"])),
+    ).toMatchObject({ ok: false, error: "owned" });
   });
 
   it("removes by symbol, case-insensitively", () => {

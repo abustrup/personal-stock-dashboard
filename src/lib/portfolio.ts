@@ -35,6 +35,42 @@ export function providerSymbol(rawSymbol: string): string {
   return `${ticker}${suffix}`;
 }
 
+/**
+ * The provider-form symbol for an already-parsed holding — the key the universe,
+ * Yahoo and the bundled directory use for a foreign listing ("0700" → "0700.HK").
+ *
+ * Derives from `rawSymbol` FIRST and falls back to the stored `providerSymbol`,
+ * because `storage.ts` validates only `symbol` and `marketValueDkk` — everything
+ * else in a saved payload is untrusted. A stale or edited `providerSymbol` would
+ * otherwise resolve a holding to the WRONG company (a "NVDA" provider symbol on a
+ * Tencent row would render it as NVIDIA), whereas the derivation can only ever
+ * produce this holding's own ticker plus a venue suffix. The stored field is still
+ * honoured when `rawSymbol` is absent, so an older payload keeps working. Both
+ * reads are type-guarded for the same reason: nothing validated them.
+ */
+export function holdingProviderSymbol(holding: Holding): string {
+  const derived = typeof holding.rawSymbol === "string" ? providerSymbol(holding.rawSymbol) : "";
+  return derived || (typeof holding.providerSymbol === "string" ? holding.providerSymbol : "");
+}
+
+/**
+ * Every symbol a holding answers to: the bare ticker the broker exports ("VWS")
+ * and its provider form ("VWS.CO"), deduped, empties dropped.
+ *
+ * One definition on purpose. A holding's two identities are consulted in three
+ * places that must agree — the dashboard's universe join and its
+ * already-owned suppression, and the watchlist's add-time rejection plus the
+ * picker's exclusion set. If any of them recognised fewer identities than the
+ * suppression does, a name you hold could be added as a watch chip that then
+ * silently shows no card.
+ */
+export function holdingIdentities(holding: Holding): string[] {
+  const identities = [holding.symbol, holdingProviderSymbol(holding)].filter(
+    (symbol): symbol is string => typeof symbol === "string" && symbol !== "",
+  );
+  return [...new Set(identities)];
+}
+
 export function parsePortfolioCsv(input: string): PortfolioParseResult {
   const rows = parseCsv(input);
   const holdings = rows

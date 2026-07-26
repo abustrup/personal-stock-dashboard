@@ -154,6 +154,61 @@ Each entry is the routine's own honest assessment — **not** a changelog:
 
 ## Runs (most recent first)
 
+### 2026-07-26 — match an owned foreign listing to its curated universe entry (self-directed run #16)
+- **Assessment:** Drove the live app against the Charter (trust first) with an imported book that
+  was not all-US — the one shape the demo seed never exercises. The result was the worst
+  self-contradiction found since run #35: a Danish broker exports a Hong Kong line as
+  `0700:xhkg`, `portfolio.ts` splits that into a bare `symbol` ("0700") plus `providerSymbol`
+  ("0700.HK"), the universe keys its four foreign entries by the provider form — and
+  `dashboard.ts` joined on the bare ticker only. So an owned Tencent position rendered as
+  **"Tencent Holdings Ltd. · portfolio import · low conviction · TRIM · 53"** off the neutral
+  `companyFromHolding` placeholder (discarding both the curated profile and the momentum the
+  refresh had already measured under the provider key), the rail headlined **"2 to review — trim
+  Tencent"**, the concentration card called the book a **"portfolio import tilt"** — and the
+  universe entry it failed to match was simultaneously offered as one of **19** buyable
+  opportunities. The app told you to trim a name and to buy it, on one screen, off a score it
+  had fabricated. `providerSymbol` had been computed on every holding since the parser was
+  written and read at **zero** production sites. Runner-up was the `storage.ts` reader-side
+  `Number.isFinite` guard (backlog #1) — declined because it collides with the still-open PR #56.
+- **Move:** fix the join. Resolve a holding to its universe entry by bare ticker FIRST, provider
+  form second, and suppress **both** identities from the opportunity field. The resolved entry
+  keeps the **holding's** symbol, so no app-wide key moves: `selectedSymbol`, the persisted change
+  baseline, the stored payload and every rendered ticker are untouched, and a US holding returns
+  the *same object by reference* so no downstream memo churns. Unified the two-identity rule into
+  one tested helper pair in `portfolio.ts` (`holdingProviderSymbol` / `holdingIdentities`) now that
+  three sites consult it. The provider key is **derived** from `rawSymbol` rather than trusted,
+  because `storage.ts` validates only `symbol` and `marketValueDkk` — a stale stored
+  `providerSymbol` would otherwise resolve a holding to the wrong company outright.
+- **Adversarial review caught two real defects in the first draft**, both fixed before shipping:
+  (1) the first `providerSymbolFor` read the stored field *first* while its own comment claimed the
+  opposite — a poisoned payload (`providerSymbol: "NVDA"` on a Tencent row) rendered the position
+  as NVIDIA at score 80/INCREASE, and a non-string `rawSymbol` threw during render; (2) widening the
+  dashboard's suppression without widening the **add-time** guard newly produced the exact state
+  `watchlist.ts` documents its owned-rejection as existing to prevent — the picker offered
+  `VWS.CO` to a holder of `VWS:xcse`, and the resulting chip would have shown no card. Both A/B'd
+  in the browser. **Note for future runs: `App.tsx`'s owned/exclude sets and `dashboard.ts`'s
+  suppression set must be widened together — they are one invariant in three places.**
+- **Also changed, deliberately (not defects, but the largest behavioural effects):** an owned
+  foreign holding now **live-reprices** — `valuation.ts` gates coverage on `rec.company.market`,
+  which the placeholder never had, so the headline NAV, day P&L, the ledger TODAY/TOTAL columns and
+  the live-coverage caption all now include it (safe: `isHoldingLive` still requires a currency
+  match). A returning owner sees one self-healing "Tencent: trim → hold" entry in the
+  since-last-refresh digest. And an EIFO §9.1 override keyed by the provider form ("0700.HK", the
+  spelling `universe.ts` uses) now blocks nothing — latent today, `complianceOverrides` is `{}`, and
+  a bare ticker or name substring still works; **follow-up: give `compliance.ts` both identities.**
+- **Still not fixed, by design:** the owned foreign row's Yahoo link stays `/quote/0700` rather than
+  the symbol that was actually priced (follow-up: build it from `company.market?.symbol`);
+  cross-listings remain unmatched, since a held `9988.HK` is a different symbol from the curated
+  `BABA` ADR and needs ISIN-level identity, not a suffix rule.
+- **Result:** shipped as a PR — 351 tests green (up from 339; `dashboard.ts` had **no** test file
+  before this run, and 6 of the 10 new ones fail against `origin/main`), build clean, verified in
+  the browser against a stored three-name book. Independent 4-lens adversarial panel verdict:
+  **SHIP-WITH-EDITS**, both blocking edits applied and re-verified. Self-merge stays blocked, so
+  the PR is handed off. **Machine note: the volume hit 100% full (403 MiB free of 460 GiB) mid-run
+  and `ENOSPC` broke even tool output; recovered by clearing the regenerable npm (1.6 G) and
+  Homebrew (620 M) caches. The owner should look at disk pressure — it is what drives the iCloud
+  eviction that has now cost four runs their setup time.**
+
 ### 2026-07-26 — stop a rail brief promising a click it can't deliver (self-directed run #15)
 - **Assessment:** Setup again cost real time and again produced findings worth more than the code change (both folded
   into the standing notes above). The canonical checkout was not merely slow this time — `git fetch` and `git status`
