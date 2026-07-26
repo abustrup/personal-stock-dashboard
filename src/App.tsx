@@ -52,7 +52,7 @@ import { importFxFactor, isHoldingLive, liveHoldingReturnPct, valuePortfolio, ty
 import { buildNextMoves, type NextMove } from "./lib/nextMoves";
 import { buildPositionSlots, type PositionSlots as PositionSlotsModel } from "./lib/positionSlots";
 import { buildPeerComparison, type PeerComparison } from "./lib/peers";
-import { parsePortfolioCsv } from "./lib/portfolio";
+import { holdingIdentities, parsePortfolioCsv } from "./lib/portfolio";
 import { buildPriceChart, monthsAgoIndex, summarizeTrend, type ChartDims } from "./lib/sparkline";
 import { describeMarketFreshness } from "./lib/freshness";
 import { rangeLabel, readRange } from "./lib/range";
@@ -154,6 +154,15 @@ function regionCode(region: string): string {
   return REGION_CODES[region] ?? region.slice(0, 2).toUpperCase();
 }
 
+// Every symbol the current book answers to — both the bare broker ticker and its
+// provider form — upper-cased, the form the bundled directory and the watchlist's
+// normalizeSymbol both use. Shares one definition of "a holding's identities" with
+// the dashboard join, so the picker, the add-time rejection and the
+// already-owned suppression can never disagree about what you already hold.
+function ownedIdentities(holdings: Holding[]): string[] {
+  return holdings.flatMap(holdingIdentities).map((symbol) => symbol.toUpperCase());
+}
+
 // How many non-owned opportunities to plot on the decision map. Owned holdings
 // are always all shown; opportunities are ranked and capped so the plane stays
 // legible — the count actually shown vs. available is surfaced in the UI.
@@ -186,7 +195,13 @@ export default function App() {
   // explain exactly what to fix; on success the new list is persisted in-browser.
   function addToWatchlist(input: { name: string; symbol: string; exchange?: string }): AddWatchError | undefined {
     const universeSymbols = new Set(universe.map((company) => company.symbol));
-    const ownedSymbols = new Set(holdings.map((holding) => holding.symbol));
+    // Both identities a holding answers to — bare ("VWS") and provider ("VWS.CO").
+    // The picker offers the provider form for the Nordic/European names, and the
+    // dashboard now suppresses BOTH from the opportunity field, so recognising only
+    // the bare one here would let a held name become a chip that shows no card —
+    // exactly what addWatchEntry's owned-symbol rejection exists to prevent.
+    // Upper-cased to match normalizeSymbol, which upper-cases the typed symbol.
+    const ownedSymbols = new Set(ownedIdentities(holdings));
     const result = addWatchEntry(watchlist, input, new Date().toISOString(), universeSymbols, ownedSymbols);
     if (!result.ok) return result.error;
     setWatchlist(result.list);
@@ -256,7 +271,9 @@ export default function App() {
   const watchExcludeSymbols = useMemo(() => {
     const set = new Set<string>();
     for (const company of universe) set.add(company.symbol.toUpperCase());
-    for (const holding of holdings) set.add(holding.symbol.toUpperCase());
+    // Both identities, so the picker stops offering "VWS.CO" to someone who already
+    // holds VWS:xcse — the model would drop that card as already-owned.
+    for (const symbol of ownedIdentities(holdings)) set.add(symbol);
     for (const entry of watchlist) set.add(entry.symbol.toUpperCase());
     return set;
   }, [holdings, watchlist]);

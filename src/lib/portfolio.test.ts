@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseDanishNumber, parsePortfolioCsv, providerSymbol } from "./portfolio";
+import {
+  holdingIdentities,
+  holdingProviderSymbol,
+  parseDanishNumber,
+  parsePortfolioCsv,
+  providerSymbol,
+} from "./portfolio";
+import type { Holding } from "./types";
 
 // Synthetic fixture (not real positions). Exercises the BOM, the skipped broker
 // summary row, comma decimals, weight-as-fraction and the P&L columns.
@@ -42,6 +49,35 @@ describe("parsePortfolioCsv", () => {
   it("maps broker symbols into provider lookup symbols", () => {
     expect(providerSymbol("GOOGL:xnas")).toBe("GOOGL");
     expect(providerSymbol("VWS:xcse")).toBe("VWS.CO");
+    // These two feed the suffixed universe entries, so the dashboard join relies
+    // on them (see dashboard.test.ts).
+    expect(providerSymbol("0700:xhkg")).toBe("0700.HK");
+    expect(providerSymbol("005930:xkrx")).toBe("005930.KS");
+  });
+
+  it("lists both identities a holding answers to", () => {
+    const [alpha] = parsePortfolioCsv(csv).holdings;
+    // A US listing has one identity: the suffix is empty, so both forms collapse.
+    expect(holdingIdentities(alpha)).toEqual(["ALPH"]);
+
+    const foreign = parsePortfolioCsv(
+      '﻿"Instrument","Antal","Aktuel kurs","Markedsværdi (DKK)","Symbol","ISIN"\n' +
+        '"Demo Foreign A/S","1","10","100.00","0700:xhkg","KY0000000001"',
+    ).holdings[0];
+    expect(holdingIdentities(foreign)).toEqual(["0700", "0700.HK"]);
+  });
+
+  it("derives the provider symbol rather than trusting an untrusted stored field", () => {
+    const [alpha] = parsePortfolioCsv(csv).holdings;
+
+    // storage.ts validates only `symbol` and `marketValueDkk`, so a stale or edited
+    // `providerSymbol` must NOT be able to point a holding at another company.
+    expect(holdingProviderSymbol({ ...alpha, providerSymbol: "NVDA" })).toBe("ALPH");
+    // Honoured when there is nothing to derive from, so an older payload still works.
+    expect(holdingProviderSymbol({ ...alpha, rawSymbol: "", providerSymbol: "ALPH" })).toBe("ALPH");
+    // Never throws on a payload whose fields aren't even strings.
+    const junk = { ...alpha, rawSymbol: undefined, providerSymbol: undefined } as unknown as Holding;
+    expect(holdingProviderSymbol(junk)).toBe("");
   });
 
   it("does not let one unparseable cell poison the portfolio total", () => {
