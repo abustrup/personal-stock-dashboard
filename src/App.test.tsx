@@ -47,6 +47,34 @@ describe("App", () => {
     expect(screen.getByText(/\d+% in NVIDIA/i)).toBeInTheDocument();
   });
 
+  // A rail brief promises navigation only when it has somewhere to go. `buildInsights`
+  // derives `count` and `top` from one array, so "All clear" / "None flagged" are exactly
+  // the states with no company to open — on a healthy book that is TWO of the three
+  // briefs. They must not render as buttons, or they advertise a click that `open()`
+  // silently discards. Both directions are asserted: a careless refactor that made every
+  // brief static would kill the working navigation the second half pins.
+  it("makes a rail brief interactive only when it has a company to open", () => {
+    render(<App />);
+
+    // The seed book is clean, so both of these briefs are in their no-target state.
+    // getByText (not queryByText) so the assertions below cannot pass vacuously.
+    expect(screen.getByText(/None flagged/i)).toBeInTheDocument();
+    expect(screen.getByText(/All clear/i)).toBeInTheDocument();
+
+    // Neither is a button, and neither is a tab stop.
+    expect(screen.queryByRole("button", { name: /None flagged/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /All clear/i })).toBeNull();
+    expect(screen.getByText(/None flagged/i).closest(".rail-brief")?.tagName).toBe("DIV");
+    expect(screen.getByText(/All clear/i).closest(".rail-brief")?.tagName).toBe("DIV");
+
+    // The Concentration brief always has a real symbol, so it stays a real button
+    // and still opens the holding's detail.
+    const concentration = screen.getByRole("button", { name: /\d+% in NVIDIA/i });
+    expect(concentration.tagName).toBe("BUTTON");
+    fireEvent.click(concentration);
+    expect(detailIsOpen()).toBeInTheDocument();
+  });
+
   it("leads the front page with the model's weighted verdict on the whole book", () => {
     render(<App />);
 
