@@ -1287,9 +1287,21 @@ body > #root {
   background: transparent;
   padding: 14px 0;
   cursor: pointer;
+  /* The global reset gives buttons `font: inherit` but not `color`, so a brief
+     rendered as a <button> would take the UA's `buttontext` (pure black) while
+     one rendered as a <div> takes --ink. Inherit explicitly so every brief reads
+     in the app's own ink regardless of which element it is. */
+  color: inherit;
 }
 
-.rail-brief:hover .rail-brief-headline {
+/* A brief with nothing to open renders as a div, not a button (see RailBrief).
+   Its content styling is deliberately identical — it is finished, not disabled —
+   so only the affordance cues are withdrawn: no pointer, no hover accent. */
+.rail-brief.static {
+  cursor: default;
+}
+
+.rail-brief:not(.static):hover .rail-brief-headline {
   color: var(--accent);
 }
 

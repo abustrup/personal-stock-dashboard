@@ -57,3 +57,29 @@ describe("keyboard focus rings on holding-navigation controls", () => {
     expect(brandedRing![0]).toContain(".trades-leg-name:focus-visible");
   });
 });
+
+describe("rail briefs only signal clickable when they are", () => {
+  /**
+   * A rail brief with no company to open renders as a plain div rather than a
+   * button (see `RailBrief`), so it is neither clickable nor a tab stop. But two
+   * of its three false affordances lived in CSS on the shared `.rail-brief`
+   * class — the pointer cursor and the accent hover on the headline — and jsdom
+   * evaluates neither `cursor` nor `:hover`. The component test pins the element
+   * type; these pin the styling, so a future refactor can't drop the `.static`
+   * handling and silently give the inert briefs back a hover accent and a
+   * pointer while the suite stays green.
+   */
+  it("gives a brief with nothing to open a default cursor, not a pointer", () => {
+    const rule = css.match(/\.rail-brief\.static\s*\{[^}]*\}/);
+    expect(rule, "expected a .rail-brief.static rule").not.toBeNull();
+    expect(rule![0]).toMatch(/cursor:\s*default/);
+  });
+
+  it("withholds the accent hover from a brief with nothing to open", () => {
+    // The hover rule must exclude the static variant. Non-vacuous: dropping the
+    // `:not(.static)` qualifier fails this.
+    const hover = css.match(/\.rail-brief[^{]*:hover\s+\.rail-brief-headline\s*\{[^}]*\}/);
+    expect(hover, "expected a .rail-brief hover rule for the headline").not.toBeNull();
+    expect(hover![0]).toContain(":not(.static)");
+  });
+});

@@ -844,6 +844,11 @@ function PortfolioView({
   onSelect: (symbol: string) => void;
 }) {
   const { needsAttention, concentration, compliance, tilt } = insights;
+  // Bound once so the rail briefs below can hand RailBrief a handler ONLY when
+  // there is a company to open — and so TypeScript narrows without an assertion.
+  // Both are undefined exactly when their count is 0 (see `buildInsights`).
+  const attentionTop = needsAttention.top;
+  const complianceTop = compliance.top;
   // Roll the owned book up into a primary-theme partition — what the money is actually
   // betting on, counted once per holding. The full-width band below the ledger.
   const composition = useMemo(() => buildBookComposition(portfolio), [portfolio]);
@@ -914,11 +919,11 @@ function PortfolioView({
             )
           }
           note={
-            needsAttention.top
-              ? `${needsAttention.top.company.name} is the model's lowest score in the book (${needsAttention.top.score}).`
+            attentionTop
+              ? `${attentionTop.company.name} is the model's lowest score in the book (${attentionTop.score}).`
               : "Nothing in the book is flagged to trim or avoid."
           }
-          onClick={() => onSelect(needsAttention.top?.company.symbol ?? "")}
+          onClick={attentionTop ? () => onSelect(attentionTop.company.symbol) : undefined}
         />
 
         {concentration && (
@@ -938,11 +943,11 @@ function PortfolioView({
           tone={compliance.count > 0 ? "warn" : "calm"}
           headline={compliance.count > 0 ? `${compliance.count} flagged` : "None flagged"}
           note={
-            compliance.count > 0 && compliance.top
-              ? `${compliance.top.compliance.status.replace("_", " ")} · ${compliance.top.company.name}.`
+            compliance.count > 0 && complianceTop
+              ? `${complianceTop.compliance.status.replace("_", " ")} · ${complianceTop.company.name}.`
               : 'No holding is blocked or in possible overlap — but no name is ever called "clean".'
           }
-          onClick={() => onSelect(compliance.top?.company.symbol ?? "")}
+          onClick={complianceTop ? () => onSelect(complianceTop.company.symbol) : undefined}
         />
       </aside>
 
@@ -1427,8 +1432,21 @@ function LedgerRow({
 }
 
 // A single brief in the portfolio rail: an uppercase tone-coloured eyebrow, a
-// headline and a muted sentence. The whole brief is a button into the relevant
-// company detail.
+// headline and a muted sentence.
+//
+// A brief is a button into the relevant company detail ONLY when it has one to
+// open. On a healthy book it often does not: `insights.ts` derives `count` and
+// `top` from the same array, so `count === 0` is exactly `top === undefined` —
+// "All clear" and "None flagged" are precisely the states with nothing to
+// navigate to. Rendering those as buttons made the calm case advertise three
+// promises it could not keep (pointer cursor, an accent hover, the branded
+// focus ring) and left a keyboard user on a tab stop whose Enter did nothing —
+// indistinguishable from a broken app on the rail that carries the compliance
+// claim. Without `onClick` the brief renders as a plain div instead.
+//
+// The content styling is deliberately unchanged: a brief with no destination is
+// not *disabled*, it is *finished* — it has said everything it knows, and that
+// is good news. Only the affordance cues are withdrawn.
 function RailBrief({
   eyebrow,
   tone,
@@ -1442,11 +1460,19 @@ function RailBrief({
   note: string;
   onClick?: () => void;
 }) {
-  return (
-    <button type="button" className="rail-brief" onClick={onClick}>
+  const body = (
+    <>
       <div className={`rail-brief-eyebrow ${tone}`}>{eyebrow}</div>
       <div className="rail-brief-headline">{headline}</div>
       <div className="rail-brief-note">{note}</div>
+    </>
+  );
+
+  if (!onClick) return <div className="rail-brief static">{body}</div>;
+
+  return (
+    <button type="button" className="rail-brief" onClick={onClick}>
+      {body}
     </button>
   );
 }
