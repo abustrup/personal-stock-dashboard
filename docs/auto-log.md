@@ -77,6 +77,31 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   lens will be tempted to ALSO add a prose method note under the axis — **don't**: the head already names the basis,
   and a caption would be the hero's only modelling disclaimer, the run #11 unevenness trap in a new costume.
 
+- **The rail-brief dead affordance is FIXED — don't re-add a bare `?? ""` handler (run #15).** `RailBrief` now renders a
+  plain `<div className="rail-brief static">` when it gets no `onClick`, and the "Needs attention" / "EIFO compliance"
+  call sites pass `top ? () => onSelect(top.company.symbol) : undefined`. Key insight worth keeping: `buildInsights`
+  derives `count` and `top` from ONE array (`insights.ts:95-96`), so `count === 0` is EXACTLY `top === undefined` — the
+  calm states ("All clear", "None flagged") ARE the no-target states, which is why the dead affordance appeared on the
+  *healthy* path, not an edge case. The fix keys off `top` directly, never off `count`, so the affordance can never
+  disagree with the actual navigation target. Three rules are load-bearing and each is mutation-pinned: the element type
+  (`App.test.tsx`, both directions), `.rail-brief.static { cursor: default }` and the `:not(.static)` qualifier on the
+  hover rule (`styles.responsive.test.ts`) — the latter two because jsdom evaluates neither `cursor` nor `:hover`.
+  A future run will be tempted to "simplify" by using `<button disabled>` instead — **don't**: disabled means
+  *temporarily unavailable*, but the state is good news that has been fully reported. The card is **finished, not
+  disabled**, which is also why its content styling is deliberately identical (no greying, no opacity change).
+
+- **SUBAGENT TREE CONTAMINATION — panel/reviewer agents can CLOBBER files in your working tree (run #15).** Run #15's
+  five-lens panel extracted sources for analysis with shell redirects (`git show HEAD:CHARTER.md > CHARTER.md`-style)
+  and left seven stray files at the repo root (`App.tsx`, `styles.css`, `src_App.tsx`, `src_App.test.tsx`,
+  `src_styles.css`, `docs_auto-log.md`, `docs_automation_self-improvement.md`) — AND **truncated `CHARTER.md` to zero
+  bytes** (`index 03dd78d..e69de29`, the empty blob), because a `>` redirect truncates the target before the command
+  writes. One stray file (`src_App.test.tsx`) was even collected by vitest and failed the run with a bogus
+  "Failed to resolve import" error that looks like a broken install. Two lessons: (a) the auto-log's standing
+  "never `git add -A`" rule is not paranoia — a blanket stage here would have **committed the deletion of the Charter**;
+  stage explicitly by path and read `git status --short` before every commit; (b) tell delegated agents in the prompt
+  NOT to write into the working tree (use the Read tool or `/tmp`) and to leave `git status` clean. Recovery is
+  `git checkout -- <file>` plus `rm` of the strays.
+
 - **ENVIRONMENT — the checkout at `~/Documents/personal-stock-dashboard` can be UNUSABLE, and the symptom lies.**
   `~/Documents` is iCloud-synced with Optimize Storage, and run #14 found **4,760 files in `node_modules` flagged
   `compressed,dataless`** (evicted placeholders; also 334 in `.git`, 32 in `src`). Any tool that walks the dependency
@@ -91,6 +116,29 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   `git --no-pager` (a pager hangs the tool shell), and this machine has **no git credential helper** configured, so
   plain `git fetch/push` over HTTPS hangs waiting on a nonexistent TTY — use
   `git -c credential.helper='!gh auth git-credential' …`.
+  **Run #15 refined the diagnosis — the fault does not always hang; it can also kill git INSTANTLY.** `git fetch` and
+  even `git status` died with **exit code 138 = 128 + 10 = SIGBUS**, not a hang. Cause: git `mmap()`s its packfile, and
+  the pack was a dataless placeholder, so the page fault had no backing data to satisfy and the kernel signalled the
+  process. **The 2-second check is `stat -f '%N size=%z blocks=%b' .git/objects/pack/*.pack`: a non-zero logical size
+  with `blocks=0` means evicted.** Run #15 also found the *reason* materialisation never completes: **`fileproviderd`
+  itself was wedged at 99.6% CPU with 187 minutes of CPU time** (`ps aux | grep fileproviderd`), so `brctl download`
+  returns exit 0 and changes nothing. `dangerouslyDisableSandbox` does not help — the sandbox is not the cause. Clone
+  off iCloud and move on; a pegged `fileproviderd` is an owner-level problem to REPORT, not something an unattended run
+  should kill. Two more traps run #15 cleared: a SIGBUS'd git leaves a stale `.git/index.lock` that blocks all later
+  writes in that checkout (`rm` it), and there is a THIRD copy of this repo at
+  `~/Documents/AI eksperimenter/personal-stock-dashboard`, a stale clone on a `maintenance/*` branch — anchor delegated
+  agents by absolute path AND expected HEAD or they will review the wrong tree (the run #7 hazard, still live).
+
+- **PREVIEW BINDING — the "the MCP insists on another chat's port 5180" hazard is a stale config file, and it is
+  FIXABLE (root cause found by run #15).** Runs #4–#13 each recorded the preview MCP mysteriously binding to a
+  sibling's dev server on 5180, and each worked around it rather than driving their own tree. It was never an MCP
+  quirk: `preview_start` resolves a config `name` against `.claude/launch.json` **in the session's primary working
+  directory**, which for this scheduled job is a *different* project. That file held exactly one entry, `dashboard`,
+  hardcoding `cd /Users/alexanderbustrup/Documents/personal-stock-dashboard && npm run dev -- --port 5180` — the iCloud
+  checkout. So any `preview_start` fell through to it, and then died on `getcwd: Operation not permitted` because that
+  tree was wedged. Fix: **add an entry pointing at YOUR clone** (additively — leave `dashboard` alone) and start it by
+  that name. Run #15 used `psd-run15` on port 5199; vite was ready in 146ms, bound to its own tree, so the live
+  assessment needed no `lsof` forensics to trust. `.claude/` is gitignored, so nothing leaks into a commit.
 
 - **GOVERNANCE — the "retired" unguarded routine was never actually disabled (found by run #14).** The scheduled task
   `stock---do-maintenance-improve-structure` (cron `0 13 * * *`) carries a description beginning "RETIRED 2026-07-03"
@@ -105,6 +153,100 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   throughput, raise this routine's cadence or re-enable that one deliberately with guardrails.
 
 ## Runs (most recent first)
+
+### 2026-07-26 — stop a rail brief promising a click it can't deliver (self-directed run #15)
+- **Assessment:** Setup again cost real time and again produced findings worth more than the code change (both folded
+  into the standing notes above). The canonical checkout was not merely slow this time — `git fetch` and `git status`
+  died on **SIGBUS (exit 138)** because the packfile was an iCloud placeholder (`blocks=0`) and **`fileproviderd` was
+  pegged at 99.6% CPU / 187 min**, so `brctl download` was a no-op. Recovered per run #14's note by cloning fresh to the
+  non-iCloud scratchpad: baseline **336 tests in 3.54s + build green (JS 325.53 kB / CSS 59.17 kB)**, real
+  `npm run refresh` = **41/41 priced + fundamentals** (snapshot 2026-07-26T02:11). I also finally rooted out the
+  **preview-binding hazard runs #4–#13 kept describing but never diagnosed** — it is a stale cross-project
+  `.claude/launch.json`, not an MCP quirk — so for the first time since run #13 the assessment ran against a dev server
+  provably bound to MY tree (5199, vite ready in 146ms), with no `lsof` forensics needed. Drove all five surfaces live
+  (NAV kr110,136 / +10.23% total / −4.44% today): Portfolio, Opportunities ("11 of 14 buyable … the rest named, not
+  silently dropped"), Map (risk-index method stated), Compare (NVDA "+37.89% total" reconciles with the ledger row to
+  the basis point), Company (EIFO "cannot be called clean", per-input MEASURED/EDITORIAL/POLICY labels, annotated chart,
+  frozen FROM-SAXO strip) all remain genuinely distinct and honest — **don't consolidate**. Judged trust-first I found
+  **no currently-visible provenance defect**, making it five consecutive runs. My own craft pass (run #13's lesson:
+  ENUMERATE focusables, don't spot-check) found the app clean at 375px — page `scrollWidth === clientWidth === 375`,
+  the wide opportunities table correctly scrolling inside `.ledger-scroll { overflow-x: auto }` — and, across 22
+  focusables on Portfolio / 15 on Company, exactly ONE outside the shared accent-ring rule: the `.upload` file input.
+  **A near-miss worth recording:** I formed a trust-framed plan to surface the parser's unused `skippedRows`
+  (`portfolio.ts:46`, zero consumers in `src/`) as a partial-import disclosure, and the panel KILLED it — a real Saxo
+  export always contains a legitimately-skipped group row (`"Aktier (6)"`, sample CSV line 2; the parser test is
+  literally named "skips broker group rows"), so `skippedRows >= 1` on every healthy import and the line would have
+  false-alarmed constantly. `skippedRows` cannot distinguish a group row from a dropped position, so it cannot honestly
+  be surfaced as-is.
+- **Move:** **remove/polish (clarity, value #2 — with a trust edge).** Ran the anti-anchoring panel as an ultracode
+  workflow: 5 lenses (trust / coherence-cold-read / decisiveness / craft-a11y / a dedicated ship-nothing advocate) + an
+  independent synthesizer. *Process note for future runs:* I passed `args` as a JSON **string** rather than an object,
+  so the tree/HEAD anchor interpolated as the literal `undefined` — 4 of 5 lenses recovered by re-deriving the repo,
+  but one landed on the stale `AI eksperimenter` clone, found its `.git` broken, and voted ship-nothing **on the basis
+  of its own wrong-tree error**; the synthesizer caught and discarded exactly that. Pass workflow args as real JSON.
+  Verdict: **A ×3 (trust, coherence, synthesizer @ high confidence)**, B ×1, D ×1, C ×1-invalid. The trust lens supplied
+  the argument that decided it, and it is better than my own framing: **A is a control that SIGNALS interactive and is
+  not; B is a control that IS interactive and does not signal. A false positive asserts something untrue to the reader;
+  a false negative merely under-communicates.** And *which* claim it sits under matters — the dead brief carries
+  'None flagged · no name is ever called "clean"', the most trust-loaded sentence in the product, so a skeptical reader
+  who tabs in to inspect the compliance claim, sees the branded focus ring, presses Enter and gets nothing **cannot
+  distinguish "nothing to show" from "this app is broken."** Verified live before building: `eifoIsDeadEnd: true` (the
+  EIFO brief swallows its click while Concentration navigates), all three briefs `BUTTON`/`cursor:pointer`/`tabIndex 0`.
+  Shipped: `RailBrief` renders a plain `div.rail-brief.static` when it has no `onClick`; the two call sites pass a
+  handler only when `top` exists. Invoked `/frontend-design` for the one real design question — should an inert brief
+  carry a signal of its own? — and it resolved on principle: **a brief with no destination is not *disabled*, it is
+  *finished***; "None flagged" is good news fully reported, so greying it out would lie in the opposite direction.
+  Content styling therefore stays byte-identical and only the three affordance cues are withdrawn — **the change adds no
+  visual vocabulary, it removes a false one** (value #3). One necessary extra: `color: inherit` on `.rail-brief`,
+  because the global reset gives buttons `font: inherit` but NOT `color`, so the button variant was rendering the UA's
+  pure black (`rgb(0,0,0)`) while a div takes `--ink` — without it the fix would have shipped two headline colours in
+  one rail; with it, all three now measure identically at `rgb(22,24,29)`, 17px/600, and the two interactive briefs move
+  ONTO the app's own token for the first time. Left the shared 19-selector `:focus-visible` rule structurally untouched
+  (a div with no tabindex simply stops matching), which is load-bearing: `styles.responsive.test.ts:48` regex-matches it.
+  Live-verified after: the rail now has 3 tab stops, **all of which navigate — `deadTabStopsRemaining: 0`**.
+  Rejected: **B** (the inert `.upload` focus ring) — verified real and genuinely severe (that control has **zero**
+  focus indicator, not merely an unbranded one: measured `opacity:0`, 1×1px, `outline:none`, a WCAG 2.4.7 failure) but
+  craft #5 yields to clarity #2, and only one move ships per run — **carried forward with its hazard below**;
+  **D** (the silent Import-CSV failure) — real, but its symptom isn't currently visible and it is the largest blast
+  radius of the three — **carried forward**; the forbidden Concentration label and the App.tsx-monolith refactor
+  (perennial).
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this branch's exact HEAD
+  `c0d7443`) verdict **SHIP** — strictly better, no regression. It proved `count === 0` ⟺ `top === undefined` from
+  first principles (`filter` never returns a sparse array; both predicates dereference `r`) and noted the fix keys off
+  `top` **directly**, never `count`, so "goes static while a target exists" is structurally impossible; enumerated all
+  three `RailBrief` call sites; confirmed the EIFO honesty sentence is **byte-identical** across the diff and that no
+  `src/lib/` compliance file was touched; measured contrast at **17.9:1**; ruled out layout shift (padding blocks margin
+  collapse; no ancestor sets line-height), specificity inversion, and dark-mode breakage; judged the removed tab stop a
+  net a11y **gain** (a dead button in the rotor was actively misleading); ran a **third** mutation of its own; and
+  observed 337 tests + green build itself. It also found `grep '?? ""'` now returns **zero** hits in `App.tsx` — this
+  branch removed the last instances of the pattern. Its one actionable nit — the CSS affordance rules were unpinned, so
+  a future refactor could drop `:not(.static)` and silently restore half the defect with a green suite — I acted on:
+  +2 source-assertion guards in `styles.responsive.test.ts` following run #13's precedent, both mutation-proven.
+  **339 tests + build green** (JS 325.62 kB, +0.09; CSS 59.23 kB, +0.06). Shipped — **PR #_pending — appended on merge._**
+  *Carry-forward — two VERIFIED candidates for run #16, in priority order:*
+  (1) **The Import-CSV silent failure** (clarity #2, the bigger of the two). `App.tsx` `handleFileUpload` ends a failed
+  parse with a bare `if (parsed.holdings.length === 0) return;` — no message, no view change, zero pixels different; if
+  a book was already imported the app keeps presenting the PREVIOUS one as current. The app already holds a *lesser*
+  input to a higher standard (a failed watchlist add renders a `role="alert"` reason with five distinct explanations),
+  and Opportunities promises ideas are "named below, not silently dropped" while the importer silently drops the whole
+  file. Reuse the existing `.watch-error` + `role="alert"` pattern. **Two binding constraints:** scope strictly to
+  `holdings.length === 0` and do **NOT** surface `skippedRows` (see the near-miss above); and place the message BELOW
+  the topbar, never inside `.topbar-actions`, which is a nowrap flex row pinned by `styles.responsive.test.ts`.
+  Also reset the file input's value so re-picking the same corrected file fires `onChange` at all.
+  (2) **The inert `.upload` focus ring** (craft #5). `.upload:focus-visible` is a no-op selector because `.upload` is a
+  `<label>` (tabIndex −1); the real tab stop is its `opacity:0` 1×1px file input, which has no focus rule at all.
+  **Binding implementation note:** a `:has()` fix MUST go in its OWN separate rule — appending it to the 19-selector
+  list would invalidate the ENTIRE list on any engine lacking `:has()` and silently delete every focus ring in the app,
+  including run #13's. `:focus-within` is NOT an acceptable substitute (clicking the label focuses the input, so it
+  would paint a persistent ring after every ordinary mouse click). Draw the outline on the LABEL, not the 1×1px input.
+  Lower-priority: `.watch-add`, the watchlist `input`s and its `select` are also outside the shared ring rule — but
+  they render at real size with visible browser defaults, so they are a consistency nit, not an a11y failure; and
+  `.map-dot`/`.map-mark` CSS is dead (zero refs in `src/`) for a future simplify run.
+  *Also recorded as standing notes above:* the refined SIGBUS/`fileproviderd` environment signature, the preview-binding
+  root cause, and the subagent tree-contamination hazard that truncated `CHARTER.md` to zero bytes this run.
+  *Governance, still unresolved and still the owner's call:* the "RETIRED" `stock---do-maintenance-improve-structure`
+  task remains `enabled: true` and has been busy — PRs **#49, #53, #54, #55, #56 and now #58** are open from it
+  (#58 landed 2026-07-25, "stop one unparseable market-value cell discarding the whole import"). Reported, not acted on.
 
 ### 2026-07-25 — name the hero sparkline what it actually plots (self-directed run #14)
 - **Assessment:** First run since 2026-07-03 (#13). Setup cost most of this run and produced a finding worth more than
