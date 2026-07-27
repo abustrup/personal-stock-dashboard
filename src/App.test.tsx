@@ -897,6 +897,9 @@ describe("App", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/no positions found in bank-statement\.csv/i);
     expect(alert).toHaveTextContent(/the book above is unchanged/i);
+    // It names what the file must contain, not one guess at what went wrong: a
+    // transactions statement, a semicolon re-save and a renamed header all land here.
+    expect(alert).toHaveTextContent(/Symbol and ISIN columns/i);
     // And the book really is untouched: identical hero, identical source line.
     expect(hero?.textContent).toBe(heroBefore);
     expect(screen.getByText(/Demo portfolio · DKK/i).textContent).toBe(sourceBefore);
@@ -924,6 +927,39 @@ describe("App", () => {
     // the same (now corrected) file is picked again — that would make the failure
     // unfixable from the UI, not merely silent.
     expect(value).toBe("");
+  });
+
+  it("announces a repeat rejection of the same file instead of reusing the message in silence", async () => {
+    render(<App />);
+
+    pickFile("nothing here\n", "kontoudtog.csv");
+    const first = await screen.findByRole("alert");
+
+    // Same filename, so the message text is identical. React would reuse the node
+    // and a screen reader would say nothing — the second attempt would go
+    // unacknowledged, which is a miniature of the silence this whole fix removes.
+    pickFile("nothing here either\n", "kontoudtog.csv");
+
+    await waitFor(() => expect(screen.getByRole("alert")).not.toBe(first));
+    expect(screen.getByRole("alert")).toHaveTextContent(/no positions found in kontoudtog\.csv/i);
+  });
+
+  it("withdraws the import rejection when the book is reset to the demo", async () => {
+    render(<App />);
+
+    // Reset only exists once a real book is loaded, so import one first — this is
+    // the true sequence: import, then a later pick fails, then reset.
+    pickFile(readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8"), "positions.csv");
+    await screen.findByText(/Imported .* saved in this browser/i);
+
+    pickFile("no positions\n", "wrong.csv");
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: /reset/i }));
+
+    // Reset replaces the book, so a message about the last rejected file would be
+    // describing a state the app has since left.
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
   it("withdraws the import rejection once a real export loads", async () => {

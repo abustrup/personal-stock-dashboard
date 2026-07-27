@@ -441,6 +441,8 @@ body > #root {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.45;
+  /* The filename is user-supplied and can be long and unbroken. */
+  overflow-wrap: anywhere;
 }
 
 /* ---------- panels (opportunities / map / compare / detail wrappers) ---- */

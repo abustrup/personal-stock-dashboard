@@ -176,10 +176,13 @@ export default function App() {
   const [brokerSettings, setBrokerSettings] = useState<BrokerSettings>(loadBrokerSettings);
   const [hideOffLimits, setHideOffLimits] = useState(false);
   const [watchlist, setWatchlist] = useState<WatchEntry[]>(loadWatchlist);
-  // The name of a file the parser found no positions in. Present only while that
-  // failure is the last thing that happened — a rejected import must not be able
-  // to pass for a silent success, and must not linger once one succeeds.
-  const [rejectedFile, setRejectedFile] = useState<string | undefined>();
+  // The file the parser found no positions in. Present only while that failure is
+  // the last thing that happened — a rejected import must not be able to pass for
+  // a silent success, and must not linger once one succeeds. `attempt` counts the
+  // rejections so re-picking the SAME failing file still remounts the alert and is
+  // announced again; without it React bails out on an identical string and the
+  // second attempt is silently unacknowledged — the very failure this fixes.
+  const [rejected, setRejected] = useState<{ file: string; attempt: number } | undefined>();
 
   function updateBrokerSettings(next: BrokerSettings) {
     setBrokerSettings(next);
@@ -398,10 +401,10 @@ export default function App() {
     // pass for the file just picked, which every NAV, weight and verdict below
     // is then derived from.
     if (parsed.holdings.length === 0) {
-      setRejectedFile(file.name);
+      setRejected((prev) => ({ file: file.name, attempt: (prev?.attempt ?? 0) + 1 }));
       return;
     }
-    setRejectedFile(undefined);
+    setRejected(undefined);
     const importedAt = new Date().toISOString();
     savePortfolio(parsed.holdings, file.name, importedAt);
     setHoldings(parsed.holdings);
@@ -412,7 +415,7 @@ export default function App() {
 
   function resetToDemo() {
     clearPortfolio();
-    setRejectedFile(undefined);
+    setRejected(undefined);
     setHoldings(seedHoldings);
     setSource({ label: "Demo portfolio", isDemo: true });
     setSelectedSymbol(seedHoldings[0]?.symbol);
@@ -566,10 +569,15 @@ export default function App() {
           rejected import would otherwise quietly mislead about — the book named
           there is still the old one. Deliberately the same calm treatment as a
           failed watchlist add: placement carries the weight, not new styling. */}
-      {rejectedFile && (
-        <p className="source-error" role="alert">
-          No positions found in {rejectedFile} — nothing was imported, and the book above is
-          unchanged. Export your positions from Saxo, not a transactions statement, and import again.
+      {rejected && (
+        // Keyed on the attempt so a repeat rejection remounts the node and is
+        // announced again, rather than React reusing an identical one in silence.
+        // The remedy names what the file must CONTAIN rather than one diagnosis:
+        // a transactions statement, a semicolon-delimited re-save and a renamed
+        // header all land here, and only the missing columns are common to them.
+        <p className="source-error" role="alert" key={rejected.attempt}>
+          No positions found in {rejected.file} — nothing was imported, and the book above is
+          unchanged. It needs a Saxo positions export, with its Symbol and ISIN columns intact.
         </p>
       )}
 
