@@ -176,6 +176,13 @@ export default function App() {
   const [brokerSettings, setBrokerSettings] = useState<BrokerSettings>(loadBrokerSettings);
   const [hideOffLimits, setHideOffLimits] = useState(false);
   const [watchlist, setWatchlist] = useState<WatchEntry[]>(loadWatchlist);
+  // The file the parser found no positions in. Present only while that failure is
+  // the last thing that happened — a rejected import must not be able to pass for
+  // a silent success, and must not linger once one succeeds. `attempt` counts the
+  // rejections so re-picking the SAME failing file still remounts the alert and is
+  // announced again; without it React bails out on an identical string and the
+  // second attempt is silently unacknowledged — the very failure this fixes.
+  const [rejected, setRejected] = useState<{ file: string; attempt: number } | undefined>();
 
   function updateBrokerSettings(next: BrokerSettings) {
     setBrokerSettings(next);
@@ -389,7 +396,18 @@ export default function App() {
     if (!file) return;
     const text = await file.text();
     const parsed = parsePortfolioCsv(text);
-    if (parsed.holdings.length === 0) return;
+    // A file the parser can find no positions in changes nothing — so say so.
+    // Silence here would leave the previously loaded book on screen and let it
+    // pass for the file just picked, which every NAV, weight and verdict below
+    // is then derived from.
+    if (parsed.holdings.length === 0) {
+      setRejected((prev) => ({
+        file: file.name,
+        attempt: prev?.file === file.name ? prev.attempt + 1 : 1,
+      }));
+      return;
+    }
+    setRejected(undefined);
     const importedAt = new Date().toISOString();
     savePortfolio(parsed.holdings, file.name, importedAt);
     setHoldings(parsed.holdings);
@@ -400,6 +418,7 @@ export default function App() {
 
   function resetToDemo() {
     clearPortfolio();
+    setRejected(undefined);
     setHoldings(seedHoldings);
     setSource({ label: "Demo portfolio", isDemo: true });
     setSelectedSymbol(seedHoldings[0]?.symbol);
@@ -503,7 +522,14 @@ export default function App() {
             <input
               type="file"
               accept=".csv,text/csv"
-              onChange={(event) => void handleFileUpload(event.target.files?.[0])}
+              onChange={(event) => {
+                // Capture the file before clearing the input: the reset is what
+                // lets the same path be picked again after a fix, since an
+                // unchanged value fires no second `change` event.
+                const picked = event.target.files?.[0];
+                event.target.value = "";
+                void handleFileUpload(picked);
+              }}
             />
           </label>
         </div>
@@ -541,6 +567,26 @@ export default function App() {
       <p className="source-line">
         {source.label} · DKK {formatNumber(model.totalMarketValueDkk)} as imported
       </p>
+
+      {/* Sits directly under the source line because that is the sentence a
+          rejected import would otherwise quietly mislead about — the book named
+          there is still the old one. Deliberately the same calm treatment as a
+          failed watchlist add: placement carries the weight, not new styling. */}
+      {rejected && (
+        // Keyed on file+attempt so a repeat rejection remounts the node rather
+        // than React reusing an identical one in silence. "Still" varies the text
+        // on a retry as well, because some screen readers suppress a consecutive
+        // identical announcement — and it acknowledges the second attempt, which
+        // is the whole point. The remedy names what the file must CONTAIN rather
+        // than one diagnosis: a transactions statement, a semicolon-delimited
+        // re-save and a renamed header all land here, and the missing columns are
+        // the only thing common to them.
+        <p className="source-error" key={`${rejected.file}#${rejected.attempt}`} role="alert">
+          {rejected.attempt > 1 ? "Still no positions found in " : "No positions found in "}
+          {rejected.file} — nothing was imported, and the book above is unchanged. It needs a Saxo
+          positions export, with its Symbol and ISIN columns intact.
+        </p>
+      )}
 
       <div className="view" key={view}>
         {view === "portfolio" && (

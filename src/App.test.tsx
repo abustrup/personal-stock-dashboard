@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -25,6 +27,25 @@ function openNvidiaDetail() {
 // The company detail view is in front when its back link is present.
 function detailIsOpen() {
   return screen.getByRole("button", { name: /back to holdings/i });
+}
+
+// The Import CSV control is a styled <label>; the real control is the visually
+// hidden file input inside it, which is what a picked file arrives on.
+function fileInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>(".upload input[type=file]");
+  if (!input) throw new Error("expected the Import CSV file input");
+  return input;
+}
+
+// Pick a file the way the browser does: put it on the input, then fire `change`.
+// jsdom's File does not implement `Blob.text()`, so supply it — the app reads the
+// picked file that way, and without it these tests would exercise a stub instead.
+function pickFile(contents: string, name: string) {
+  const file = new File([contents], name, { type: "text/csv" });
+  if (typeof file.text !== "function") {
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(contents) });
+  }
+  fireEvent.change(fileInput(), { target: { files: [file] } });
 }
 
 describe("App", () => {
@@ -854,6 +875,117 @@ describe("App", () => {
     expect(screen.getByText(/^~3M · \+12\.60%$/)).toBeInTheDocument();
     expect(screen.getByText(/^~6M · \+9\.00%$/)).toBeInTheDocument();
     expect(screen.getByText(/the same series momentum is derived from/i)).toBeInTheDocument();
+  });
+
+  // The whole book — every NAV, weight, verdict and sized action — descends from one
+  // input. A file the parser finds no positions in used to end in a bare `return`:
+  // no message, no state change, not one pixel different, while the previously loaded
+  // book stayed on screen and passed for the file just picked. These pin that the
+  // rejection is stated, that it can be retried, and that it never outlives itself.
+  it("says so when an imported file contains no positions, and leaves the book untouched", async () => {
+    render(<App />);
+    // The hero carries the NAV, the total and today's move — the numbers a reader
+    // would act on. Snapshot it whole so "nothing changed" is pinned, not sampled.
+    const hero = document.querySelector(".hero");
+    const heroBefore = hero?.textContent;
+    expect(heroBefore).toMatch(/net asset value/i);
+    const sourceBefore = screen.getByText(/Demo portfolio · DKK/i).textContent;
+
+    pickFile("this is not a portfolio export\nnope,nope\n", "bank-statement.csv");
+
+    // The rejection is announced, names the file, and says the book is unchanged.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/no positions found in bank-statement\.csv/i);
+    expect(alert).toHaveTextContent(/the book above is unchanged/i);
+    // It names what the file must contain, not one guess at what went wrong: a
+    // transactions statement, a semicolon re-save and a renamed header all land here.
+    expect(alert).toHaveTextContent(/Symbol and ISIN columns/i);
+    // And the book really is untouched: identical hero, identical source line.
+    expect(hero?.textContent).toBe(heroBefore);
+    expect(screen.getByText(/Demo portfolio · DKK/i).textContent).toBe(sourceBefore);
+  });
+
+  it("clears the file input after a rejected import so the corrected file can be re-picked", async () => {
+    render(<App />);
+
+    // A real browser leaves the picked path on `input.value`; jsdom never sets it,
+    // so asserting on it directly would pass whether or not the app clears it.
+    // Back the property with a stub seeded as a browser would, and watch it.
+    let value = "C:\\fakepath\\typo.csv";
+    Object.defineProperty(fileInput(), "value", {
+      configurable: true,
+      get: () => value,
+      set: (next: string) => {
+        value = next;
+      },
+    });
+
+    pickFile("no positions here\n", "typo.csv");
+    await screen.findByRole("alert");
+
+    // An input still holding the rejected path fires no second `change` event when
+    // the same (now corrected) file is picked again — that would make the failure
+    // unfixable from the UI, not merely silent.
+    expect(value).toBe("");
+  });
+
+  it("announces a repeat rejection of the same file instead of reusing the message in silence", async () => {
+    render(<App />);
+
+    pickFile("nothing here\n", "kontoudtog.csv");
+    const first = await screen.findByRole("alert");
+
+    // Same filename. React would reuse the node and a screen reader would say
+    // nothing — the second attempt would go unacknowledged, which is a miniature
+    // of the silence this whole fix removes.
+    pickFile("nothing here either\n", "kontoudtog.csv");
+
+    // A fresh node, AND text that differs from the first — some screen readers
+    // suppress a consecutive identical announcement, so the remount alone is not
+    // enough to guarantee the retry is heard.
+    await waitFor(() => expect(screen.getByRole("alert")).not.toBe(first));
+    expect(screen.getByRole("alert")).toHaveTextContent(/still no positions found in kontoudtog\.csv/i);
+
+    // A different file is a first attempt again, not a continuation.
+    pickFile("nor here\n", "aarsopgoerelse.csv");
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/^No positions found in aarsopgoerelse\.csv/),
+    );
+  });
+
+  it("withdraws the import rejection when the book is reset to the demo", async () => {
+    render(<App />);
+
+    // Reset only exists once a real book is loaded, so import one first — this is
+    // the true sequence: import, then a later pick fails, then reset.
+    pickFile(readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8"), "positions.csv");
+    await screen.findByText(/Imported .* saved in this browser/i);
+
+    pickFile("no positions\n", "wrong.csv");
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: /reset/i }));
+
+    // Reset replaces the book, so a message about the last rejected file would be
+    // describing a state the app has since left.
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("withdraws the import rejection once a real export loads", async () => {
+    render(<App />);
+
+    pickFile("nothing parseable\n", "wrong.csv");
+    await screen.findByRole("alert");
+
+    // The shipped sample is a real Saxo positions export, so this also pins that
+    // the demo file the README points at still parses.
+    pickFile(readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8"), "positions.csv");
+
+    // The message must not outlive the failure it describes, or it becomes a new
+    // false claim about a book that did import.
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByText(/Imported .* saved in this browser/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Demo portfolio · DKK/i)).not.toBeInTheDocument();
   });
 
   it("offers external deep-dive links on the company detail, opening in a new tab", () => {
