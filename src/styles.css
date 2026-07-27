@@ -429,6 +429,20 @@ body > #root {
   letter-spacing: 0.02em;
 }
 
+/* A rejected import, answered where the claim it corrects lives — immediately
+   under the source line. Same treatment as a failed watchlist add (12px / 600 in
+   --down): no icon, no banner, no tint. The escalation from the line above is
+   carried by placement and weight, not by new visual vocabulary. */
+.source-error {
+  margin: 0;
+  padding: 7px 32px 0;
+  max-width: 62ch;
+  color: var(--down);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 /* ---------- panels (opportunities / map / compare / detail wrappers) ---- */
 .panel {
   padding: 18px 32px 38px;
@@ -4119,6 +4133,7 @@ body > #root {
   .hero,
   .tabs,
   .source-line,
+  .source-error,
   .panel,
   .portfolio-grid,
   .detail {
