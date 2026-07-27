@@ -401,7 +401,10 @@ export default function App() {
     // pass for the file just picked, which every NAV, weight and verdict below
     // is then derived from.
     if (parsed.holdings.length === 0) {
-      setRejected((prev) => ({ file: file.name, attempt: (prev?.attempt ?? 0) + 1 }));
+      setRejected((prev) => ({
+        file: file.name,
+        attempt: prev?.file === file.name ? prev.attempt + 1 : 1,
+      }));
       return;
     }
     setRejected(undefined);
@@ -570,14 +573,18 @@ export default function App() {
           there is still the old one. Deliberately the same calm treatment as a
           failed watchlist add: placement carries the weight, not new styling. */}
       {rejected && (
-        // Keyed on the attempt so a repeat rejection remounts the node and is
-        // announced again, rather than React reusing an identical one in silence.
-        // The remedy names what the file must CONTAIN rather than one diagnosis:
-        // a transactions statement, a semicolon-delimited re-save and a renamed
-        // header all land here, and only the missing columns are common to them.
-        <p className="source-error" role="alert" key={rejected.attempt}>
-          No positions found in {rejected.file} — nothing was imported, and the book above is
-          unchanged. It needs a Saxo positions export, with its Symbol and ISIN columns intact.
+        // Keyed on file+attempt so a repeat rejection remounts the node rather
+        // than React reusing an identical one in silence. "Still" varies the text
+        // on a retry as well, because some screen readers suppress a consecutive
+        // identical announcement — and it acknowledges the second attempt, which
+        // is the whole point. The remedy names what the file must CONTAIN rather
+        // than one diagnosis: a transactions statement, a semicolon-delimited
+        // re-save and a renamed header all land here, and the missing columns are
+        // the only thing common to them.
+        <p className="source-error" key={`${rejected.file}#${rejected.attempt}`} role="alert">
+          {rejected.attempt > 1 ? "Still no positions found in " : "No positions found in "}
+          {rejected.file} — nothing was imported, and the book above is unchanged. It needs a Saxo
+          positions export, with its Symbol and ISIN columns intact.
         </p>
       )}
 

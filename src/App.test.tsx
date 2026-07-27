@@ -935,13 +935,22 @@ describe("App", () => {
     pickFile("nothing here\n", "kontoudtog.csv");
     const first = await screen.findByRole("alert");
 
-    // Same filename, so the message text is identical. React would reuse the node
-    // and a screen reader would say nothing — the second attempt would go
-    // unacknowledged, which is a miniature of the silence this whole fix removes.
+    // Same filename. React would reuse the node and a screen reader would say
+    // nothing — the second attempt would go unacknowledged, which is a miniature
+    // of the silence this whole fix removes.
     pickFile("nothing here either\n", "kontoudtog.csv");
 
+    // A fresh node, AND text that differs from the first — some screen readers
+    // suppress a consecutive identical announcement, so the remount alone is not
+    // enough to guarantee the retry is heard.
     await waitFor(() => expect(screen.getByRole("alert")).not.toBe(first));
-    expect(screen.getByRole("alert")).toHaveTextContent(/no positions found in kontoudtog\.csv/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/still no positions found in kontoudtog\.csv/i);
+
+    // A different file is a first attempt again, not a continuation.
+    pickFile("nor here\n", "aarsopgoerelse.csv");
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/^No positions found in aarsopgoerelse\.csv/),
+    );
   });
 
   it("withdraws the import rejection when the book is reset to the demo", async () => {

@@ -90,6 +90,28 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   *temporarily unavailable*, but the state is good news that has been fully reported. The card is **finished, not
   disabled**, which is also why its content styling is deliberately identical (no greying, no opacity change).
 
+- **The silent CSV import is FIXED — don't re-add a bare `return`, and don't escalate the message (run #16).**
+  `handleFileUpload` now sets `rejected: { file, attempt }` on `holdings.length === 0` and renders a `role="alert"`
+  under `.source-line`; it clears on a successful import and on `resetToDemo`. Three rules are load-bearing and each is
+  mutation-pinned: (a) `event.target.value = ""` on every pick — **without it a corrected file re-picked at the same
+  path fires no `change` event at all**, which made the failure unfixable rather than merely silent; (b) the per-file
+  `attempt` counter, the `key={file#attempt}` and the "Still no positions found…" wording on a retry — React bails out
+  on an identical filename string, and a remount alone is not enough because some screen readers suppress a
+  consecutive *identical* announcement, so the text must vary too; (c) the clear in `resetToDemo`, which was unguarded
+  until the reviewer caught it. **Scope stays at
+  `holdings.length === 0`** — do NOT surface `skippedRows` (run #15's near-miss: a healthy Saxo export always has ≥1
+  legitimately-skipped group row). A future run will be tempted to give this an icon, a banner or a tinted panel
+  because "the whole book is bigger than a watchlist entry" — **don't**: placement under the sentence it corrects
+  carries the weight, and a banner would be the app's only alert panel, the run #11 unevenness trap in a new costume.
+  The copy names what the file must CONTAIN, not one diagnosis; keep it that way (a semicolon-delimited re-save and a
+  renamed header reach the same branch as a transactions statement).
+- **TEST TRAP — `expect(fileInput().value).toBe("")` PASSES VACUOUSLY in jsdom (run #16).** jsdom never populates a
+  file input's `value` when `fireEvent.change(input, { target: { files } })` sets `files`, so the assertion is true
+  whether or not the app clears it — it survived the mutation that deletes the reset line. It only became load-bearing
+  after backing `value` with an `Object.defineProperty` stub seeded as a browser seeds it (`C:\fakepath\…`). Same
+  class as jsdom not evaluating `cursor`/`:hover` (run #15): **mutate every new assertion; a green test is not
+  evidence until you've watched it fail.** Related: jsdom's `File` does not implement `Blob.text()`, so a test that
+  drives the real upload path must supply it.
 - **SUBAGENT TREE CONTAMINATION — panel/reviewer agents can CLOBBER files in your working tree (run #15).** Run #15's
   five-lens panel extracted sources for analysis with shell redirects (`git show HEAD:CHARTER.md > CHARTER.md`-style)
   and left seven stray files at the repo root (`App.tsx`, `styles.css`, `src_App.tsx`, `src_App.test.tsx`,
@@ -153,6 +175,104 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   throughput, raise this routine's cadence or re-enable that one deliberately with guardrails.
 
 ## Runs (most recent first)
+
+### 2026-07-27 — the import stops failing in silence (self-directed run #16)
+- **Assessment:** Environment behaved exactly as the standing note predicts and cost only minutes this time:
+  `node_modules` under `~/Documents` was `compressed,dataless` again, so I cloned fresh to the non-iCloud scratchpad
+  and `npm ci`'d there — baseline **339 tests in 2.91s + build green** (JS 325.62 kB / CSS 59.23 kB), real
+  `npm run refresh` = **41/41 priced + fundamentals**. `fileproviderd` was idle (0.0% CPU), so the run #15 wedge was
+  not present; the eviction alone is enough to justify cloning off iCloud. Run #15's preview-binding fix WORKED
+  first try: added a second entry (`psd-run16`, port 5201, `--strictPort`) to the cross-project `.claude/launch.json`
+  and the dev server bound to MY tree with no `lsof` forensics. Drove all five surfaces live (NAV kr110,136 /
+  +10.23% total / −4.44% today, data 27 Jul 02:09): Portfolio, Opportunities ("11 of 14 buyable … the rest named,
+  not silently dropped"), Map (risk method stated), Compare (NVDA +37.89% total reconciles with the ledger row to the
+  basis point), Company (EIFO "cannot be called clean", per-input MEASURED/EDITORIAL/POLICY labels, annotated chart,
+  the correctly-demoted FROM SAXO strip) — all still genuinely distinct, **don't consolidate**. I found no NEW
+  currently-visible provenance defect, six runs running. What I did do was **reproduce run #15's two carry-forwards
+  live rather than trusting them**: injecting a garbage CSV into the real file input left `document.body.innerText`
+  **byte-identical at 3335 chars**, zero `[role=alert]`, NAV unchanged, source line still "Demo portfolio" — literally
+  zero pixels; and the `.upload` tab stop measured `1×1px`, `opacity: 0`, no focus rule, the only one of 15 focusables
+  outside the shared accent ring.
+- **Move:** **fix (clarity #2 with a coherence #3 spine)** — make a rejected CSV import say so. Ran the anti-anchoring
+  panel as an ultracode workflow: 5 lenses (trust / coherence-cold-read / decisiveness+bigger-defect-hunt / craft-a11y /
+  a dedicated ship-nothing advocate) + an independent synthesizer. Verdict **A ×5, synthesizer high confidence**, and
+  the ship-nothing advocate conceded in writing. The decisive argument was not mine: the app already gives a failed
+  *watchlist add* — the most trivial input in the product — a `role="alert"` with five distinct explanations, while the
+  *whole-book import*, the input every NAV, weight, verdict and sized action descends from, got a bare `return`. An
+  honesty standard stricter on the trivial input than the load-bearing one is not a policy, it is an accident. The
+  panel also **corrected my framing on the record**, which is the point of running it: "the app keeps presenting the
+  PREVIOUS book as current" is overstated — the source line still names the previously-loaded book with its own import
+  date, so nothing on screen becomes false. This is a **clarity defect, not a value-#1 one**; the app fails to withdraw
+  an implicature rather than asserting a falsehood. Don't let a future run re-promote it. Shipped: `rejected: { file,
+  attempt }` state set only on `holdings.length === 0`, cleared on a successful import and on `resetToDemo`; a
+  `role="alert"` paragraph rendered **directly under `.source-line`** — the sentence whose implication it corrects;
+  and `event.target.value = ""` on every pick. That last one is the part that matters most and was nearly missed: an
+  input still holding the rejected path fires **no second `change` event**, so re-picking the corrected file did
+  nothing at all — the failure was not merely silent, it was **unfixable from the UI**. Invoked `/frontend-design` for
+  the one real design question (does a whole-book failure earn more visual weight than a watchlist error?) and it
+  resolved on principle: **placement carries the weight, not styling**. Same 12px/600 `--down` treatment as
+  `.watch-error`, no icon, no banner, no tint — escalating to the app's only alert panel would be the run #11
+  unevenness trap in a new costume. Declined: **B**, the inert `.upload` focus ring — verified real again (a WCAG 2.4.7
+  failure, a tab stop with *zero* indicator) but craft #5 yields to clarity #2 and only one move ships; **third
+  deferral, so make it run #17's default**. Also declined: ship-nothing, and the forbidden list (Concentration label,
+  FROM SAXO live, `skippedRows`, monolith refactor).
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to the exact HEAD) verdict
+  **SHIP** — strictly better, no regression. It enumerated every path that changes the loaded book and confirmed each
+  clears the message; proved the File is captured before the value reset and that `""` is the one assignment the HTML
+  spec permits on a file input; measured the message flush under the source line (`.source-line` bottom 860.5 =
+  `.source-error` top 860.5, nothing above shifted) and 20px padding at 375px; measured contrast **6.2:1**; confirmed
+  React escapes the user-supplied filename; ran its own mutations; and observed 342 tests + green build itself. It
+  raised six nits and **its first was a real miniature of the defect being fixed**: re-picking the SAME failing file
+  left the message node untouched, so React bailed out and a screen reader said nothing. I acted on it and on two
+  others — the state carries a per-file `attempt` counter and the alert is `key`ed on `file#attempt` so a repeat
+  remounts; on re-review it pointed out that a remount alone is only *probably* announced (some screen readers
+  suppress a consecutive identical string), so the retry now also reads **"Still no positions found in …"** — which
+  both defeats the de-dup and acknowledges the second attempt, at the cost of one ternary. The
+  remedy line names what the file must CONTAIN ("a Saxo positions export, with its Symbol and ISIN columns intact")
+  instead of one guess at the cause, because a semicolon-delimited re-save and a renamed header reach the same branch
+  and the old copy told those users to do what they had already done; and `overflow-wrap: anywhere` for long filenames.
+  It also found `resetToDemo`'s clear was **unguarded** — deleting it left the suite green — so that is now tested.
+  The upload path had **zero** test coverage before this run; it now has five, **each mutation-proven**. One trap worth
+  keeping: the naive `expect(fileInput().value).toBe("")` **passes vacuously** — jsdom never populates a file input's
+  value, so the assertion is true whether or not the app clears it. It only became load-bearing after backing the
+  property with a stub seeded the way a browser seeds it. **344 tests + build green** (JS 326.05 kB, +0.43;
+  CSS 59.39 kB, +0.16). Live acceptance demonstrated, not asserted: garbage CSV → alert names the file with the hero
+  and source line byte-identical; same file re-picked → new alert node reading "Still no positions found…"; a
+  different bad file → back to "No positions found…"; real sample export → alert withdrawn, source
+  line flips to "Imported 27 Jul 2026 · saved in this browser", 6 holdings; Reset → withdrawn; 375px → no horizontal
+  overflow, aligned with the source line; console clean. Shipped — **PR #_pending — appended on merge._**
+  *Carry-forward for run #17, in priority order (1 and 2 verified by the panel, not by me — re-verify before building):*
+  (1) **`.next-moves-foot` is a dead class.** `App.tsx` renders `className="next-moves-foot"` (plural); the only rule is
+  `.next-move-foot` (singular, `styles.css` ~2221). I confirmed it myself: the built CSS contains `next-move-foot`
+  **once** and `next-moves-foot` **zero** times, so the Opportunities deploy-queue method note ships at inherited 16px
+  full `--ink`, making the caveat the largest text in a card that sets company names at 14.5px. Visible on every load,
+  unlogged for fifteen runs. One-word rename; pin it with a test asserting every `-foot` className in `App.tsx` has a
+  matching selector.
+  (2) **The `.upload` focus ring** (craft #5, third deferral — make it the default if nothing bigger appears). The
+  `:has()` fix MUST live in its OWN rule; appending it to the 19-selector list would invalidate the whole list on any
+  engine lacking `:has()` and silently delete every focus ring in the app. `:focus-within` is not acceptable (a mouse
+  click on the label would leave a persistent ring). Draw on the label. **Correction to run #15's note:** no CSS sets
+  `outline: none` on that input — `none` is just the unfocused default. The defect is that the UA ring is painted on a
+  1×1px element at `opacity: 0`. Don't hunt for a rule that doesn't exist.
+  (3) **Import silence is reduced, not eliminated** — state this honestly rather than claiming imports are now candid.
+  A CSV with Symbol+ISIN but a renamed value column parses to `holdings.length > 0`, writes "Imported today", and
+  `dashboard.ts:48` sums `marketValueDkk` with **no finite guard** while `portfolio.ts` deliberately has one ("a single
+  unparseable cell must not poison the portfolio total") — so a NaN NAV can render as a fresh successful import.
+  Coordinate with open PR #58, which touches that parser. Separately, a `file.text()` rejection (unreadable file) is
+  still an unhandled promise with no UI.
+  (4) **`src/lib/changes.ts`:** `prev.owned` is written and never read — `changeForName` recomputes `owned` from the
+  current rec — so selling a position and re-importing makes a name cross verdict ladders and the digest reports "the
+  model's verdict changed" when only the book changed. Compounding: `ACTION_RANK` ties hold/watch at 1 and
+  increase/investigate at 2, so a ladder-crossing tie renders a green up-arrow for a change with no direction.
+  *Process notes:* the workflow `args` interpolated as the literal string `undefined` **again** — passing a JSON string
+  where the tool wants a real JSON value is a second, distinct bug from run #15's, and worse, my decoy list named the
+  **canonical** checkout as a decoy, so a lens obeying the prompt literally had nowhere legal to read. All five
+  recovered by re-deriving the repo and the synthesizer verified they read identical content, but fix both. Reviewer
+  hygiene held this run: I told the reviewer to use no shell redirects and `git status` was empty throughout — no
+  repeat of run #15's `CHARTER.md` truncation.
+  *Governance, still unresolved and still the owner's call:* the "RETIRED" `stock---do-maintenance-improve-structure`
+  task is still `enabled: true`. **Seven** of its PRs are now open — #49, #53, #54, #55, #56, #58, #60 — up from six.
+  Reported, not acted on.
 
 ### 2026-07-26 — stop a rail brief promising a click it can't deliver (self-directed run #15)
 - **Assessment:** Setup again cost real time and again produced findings worth more than the code change (both folded
