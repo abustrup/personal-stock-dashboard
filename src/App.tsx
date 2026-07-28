@@ -428,6 +428,12 @@ export default function App() {
     // quietly understated NAV is worse than a loud refusal. Accepted rows already
     // require both Symbol and ISIN, so the broker's group/summary rows never reach
     // this check — a real position always carries a market value.
+    //
+    // Note that `parsePortfolioCsv` computes its own finite-guarded total under the
+    // opposite policy ("A single unparseable cell must not poison the portfolio
+    // total"). That field has no consumer outside its tests — the screen is fed by
+    // `buildDashboard`'s unguarded sum — so the guard never governed anything the
+    // owner could see. This gate is where that decision actually gets made.
     if (parsed.holdings.some((holding) => !Number.isFinite(holding.marketValueDkk))) {
       setRejected((prev) => ({
         file: file.name,
