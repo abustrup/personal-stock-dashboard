@@ -176,13 +176,19 @@ export default function App() {
   const [brokerSettings, setBrokerSettings] = useState<BrokerSettings>(loadBrokerSettings);
   const [hideOffLimits, setHideOffLimits] = useState(false);
   const [watchlist, setWatchlist] = useState<WatchEntry[]>(loadWatchlist);
-  // The file the parser found no positions in. Present only while that failure is
+  // The file the import refused, and why. Present only while that failure is
   // the last thing that happened — a rejected import must not be able to pass for
   // a silent success, and must not linger once one succeeds. `attempt` counts the
   // rejections so re-picking the SAME failing file still remounts the alert and is
   // announced again; without it React bails out on an identical string and the
   // second attempt is silently unacknowledged — the very failure this fixes.
-  const [rejected, setRejected] = useState<{ file: string; attempt: number } | undefined>();
+  // `reason` distinguishes the two ways a file can fail to become a book: it found
+  // no positions at all, or it found positions it cannot put a value on. Both leave
+  // the reader in the same place (nothing imported, book unchanged, fix the file and
+  // re-pick), so they share one surface and one treatment and differ only in wording.
+  const [rejected, setRejected] = useState<
+    { file: string; attempt: number; reason: "no-positions" | "unvaluable" } | undefined
+  >();
 
   function updateBrokerSettings(next: BrokerSettings) {
     setBrokerSettings(next);
@@ -404,6 +410,29 @@ export default function App() {
       setRejected((prev) => ({
         file: file.name,
         attempt: prev?.file === file.name ? prev.attempt + 1 : 1,
+        reason: "no-positions",
+      }));
+      return;
+    }
+    // A position the parser accepted but cannot put a market value on poisons the
+    // one number the whole screen is built from. `parseDanishNumber` yields NaN for
+    // any cell it can't read — blank, "n/a", a renamed or absent column — and that
+    // NaN reaches the headline NAV, so the app would otherwise render the literal
+    // "NaN" while still dating the import as a success. Worse, the today-% guard
+    // (`total - dayGain > 0`) is false for NaN and falls back to a literal 0, which
+    // renders as a green "▲ 0.00% today": a measured-looking figure manufactured by
+    // the very fault that made the book unvaluable.
+    //
+    // Rejected on ANY non-finite value, not all: dropping one position from a total
+    // that then sizes real trades is the silent version of the same lie, and a
+    // quietly understated NAV is worse than a loud refusal. Accepted rows already
+    // require both Symbol and ISIN, so the broker's group/summary rows never reach
+    // this check — a real position always carries a market value.
+    if (parsed.holdings.some((holding) => !Number.isFinite(holding.marketValueDkk))) {
+      setRejected((prev) => ({
+        file: file.name,
+        attempt: prev?.file === file.name ? prev.attempt + 1 : 1,
+        reason: "unvaluable",
       }));
       return;
     }
@@ -580,11 +609,22 @@ export default function App() {
         // is the whole point. The remedy names what the file must CONTAIN rather
         // than one diagnosis: a transactions statement, a semicolon-delimited
         // re-save and a renamed header all land here, and the missing columns are
-        // the only thing common to them.
+        // the only thing common to them. The unvaluable case follows the same rule —
+        // a blank cell, an "n/a", a renamed column and an English-language export
+        // all reach it, so it names the number the file must carry, not the cause.
+        // Both reasons share this one surface and treatment deliberately: they leave
+        // the reader in the same position, so a second visual register would encode
+        // a severity difference they cannot act on differently.
         <p className="source-error" key={`${rejected.file}#${rejected.attempt}`} role="alert">
-          {rejected.attempt > 1 ? "Still no positions found in " : "No positions found in "}
-          {rejected.file} — nothing was imported, and the book above is unchanged. It needs a Saxo
-          positions export, with its Symbol and ISIN columns intact.
+          {rejected.reason === "unvaluable"
+            ? `${rejected.attempt > 1 ? "Still couldn't" : "Couldn't"} value every position in `
+            : rejected.attempt > 1
+              ? "Still no positions found in "
+              : "No positions found in "}
+          {rejected.file} — nothing was imported, and the book above is unchanged.{" "}
+          {rejected.reason === "unvaluable"
+            ? "Every position needs a readable number in its Markedsværdi (DKK) column."
+            : "It needs a Saxo positions export, with its Symbol and ISIN columns intact."}
         </p>
       )}
 
