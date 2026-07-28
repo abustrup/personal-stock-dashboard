@@ -988,6 +988,64 @@ describe("App", () => {
     expect(screen.queryByText(/Demo portfolio · DKK/i)).not.toBeInTheDocument();
   });
 
+  it("refuses an export it cannot value, instead of rendering a NaN book as a fresh import", async () => {
+    render(<App />);
+
+    // A real Saxo positions export with exactly ONE unreadable market-value cell —
+    // the repo's own parser fixture uses "n/a" for this, so it is the anticipated
+    // shape of a bad cell, not an invented one. Identity columns stay intact, so
+    // the row is still accepted as a position and the no-positions gate cannot fire.
+    const sample = readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8");
+    const oneBadCell = sample.replace('"16339.20"', '"n/a"');
+    expect(oneBadCell).not.toBe(sample);
+
+    pickFile(oneBadCell, "positioner.csv");
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/^Couldn't value every position in positioner\.csv/),
+    );
+    // The remedy names the number the file must carry, not one guess at the cause.
+    expect(screen.getByRole("alert")).toHaveTextContent(/readable number in its Markedsværdi \(DKK\) column/i);
+
+    // The actual harm: a non-finite total reaches the headline NAV as the literal
+    // string "NaN", and the today-% guard falls back to a plausible green 0.00%.
+    // Nothing anywhere on the screen may show it.
+    expect(document.body.textContent).not.toMatch(/NaN/);
+
+    // And the book on screen is still the demo one — the import changed nothing.
+    expect(screen.getByText(/Demo portfolio · DKK/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Imported .* saved in this browser/i)).not.toBeInTheDocument();
+  });
+
+  it("varies the wording when the same unvaluable file is picked again", async () => {
+    render(<App />);
+
+    const sample = readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8");
+    pickFile(sample.replace('"16339.20"', '"n/a"'), "positioner.csv");
+    const first = await screen.findByRole("alert");
+
+    // Same filename again: the node must remount AND the text must differ, or a
+    // screen reader may suppress the repeat — the same rule the no-positions
+    // branch follows, applied to this reason.
+    pickFile(sample.replace('"16339.20"', '""'), "positioner.csv");
+
+    await waitFor(() => expect(screen.getByRole("alert")).not.toBe(first));
+    expect(screen.getByRole("alert")).toHaveTextContent(/^Still couldn't value every position in positioner\.csv/);
+  });
+
+  it("still imports a healthy export, so the unvaluable check cannot false-positive", async () => {
+    render(<App />);
+
+    // The guard against the fix itself: the shipped sample is a real export whose
+    // every position carries a market value, and the broker's group/summary row
+    // (which has no Symbol or ISIN) must not be mistaken for an unvaluable one.
+    pickFile(readFileSync(resolve(process.cwd(), "sample/portfolio-sample.csv"), "utf8"), "positioner.csv");
+
+    await screen.findByText(/Imported .* saved in this browser/i);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/NaN/);
+  });
+
   it("offers external deep-dive links on the company detail, opening in a new tab", () => {
     render(<App />);
     openNvidiaDetail();

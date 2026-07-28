@@ -174,7 +174,143 @@ Each entry is the routine's own honest assessment — **not** a changelog:
   a routine's**: a run should REPORT it, not silently disable the task or close the PRs. If the owner wants that
   throughput, raise this routine's cadence or re-enable that one deliberately with guardrails.
 
+- **The unvaluable-import refusal is DONE — and NEVER "fix" it by guarding `dashboard.ts`'s `sum()` (run #17).**
+  `handleFileUpload` now refuses an import when **ANY** accepted holding has a non-finite `marketValueDkk`, through the
+  SAME `rejected` state and `role="alert"` surface run #16 built (a `reason: "no-positions" | "unvaluable"` discriminant,
+  not a second alert node). Three rules are load-bearing and each is mutation-pinned: the predicate is **`some`, not
+  `every`** (the `every` mutant lets one bad cell through and fails the suite); the `reason` discriminant drives the
+  copy at both call sites; and `expect(document.body.textContent).not.toMatch(/NaN/)` is independently load-bearing —
+  the reviewer proved it fails on its own when an alert is shown *and* the NaN book still imports.
+  **The trap a future run WILL reach for:** adding `Number.isFinite` to `sum()` (`dashboard.ts:67-69`) is a ten-second
+  change that turns the suite green and removes the visible "NaN" — and it is **strictly worse than the bug**, because
+  it replaces a loud failure with a silently understated NAV that then *sizes real trades* via `planPosition` and
+  `buildNextMoves`. All five panel lenses flagged this independently. If the refusal can't land cleanly, ship nothing.
+  Note `portfolio.ts:47-51` is already that pattern; it is the wrong policy, not the model to copy.
+- **THE DEAD GUARD — a green test standing over a property the product does not have (found by run #17).**
+  `parsePortfolioCsv` returns a finite-guarded `totalMarketValueDkk` (`portfolio.ts:44-52`) under the comment "A single
+  unparseable cell must not poison the portfolio total", pinned by a passing test literally named *"does not let one
+  unparseable cell poison the portfolio total"* (`portfolio.test.ts:47-59`, fixture uses `"n/a"`). **That field has no
+  non-test consumer** — `App.tsx` and `portfolioSeed.ts` both read `.holdings` only — while the screen is fed by
+  `dashboard.ts:48`'s *unguarded* sum. The guard was written into the one place nothing reads and omitted from the one
+  place everything reads. This is why the defect survived 16 runs: the test suite asserted the property was safe.
+  **Lesson beyond this repo: a passing test proves a function's behaviour, never that the product uses that function.**
+  When a guard matters, pin it at the consumer. Reconcile the dead field AFTER PR #58 lands (see carry-forwards).
+- **WORKFLOW ARGS — pass a real JSON value, not a JSON string. THIRD occurrence (runs #15, #16, #17).**
+  Run #17 passed `args` as a JSON *string* to the Workflow tool; it interpolated as the literal `undefined` for BOTH
+  the repo path and the expected HEAD, so every lens got `git -C "undefined" rev-parse HEAD`. Four of five recovered by
+  re-deriving the tree, but the fifth voted **ship-nothing purely on the basis of its own broken anchor** and the
+  synthesizer had to discard it (its own closing paragraph conceded the point). Worse, the decoy list the same template
+  produced named the canonical checkout as forbidden, so an obedient lens had nowhere legal to read. This has now cost
+  three consecutive runs a lens. Pass `args` as an actual JSON object.
+
 ## Runs (most recent first)
+
+### 2026-07-28 — refuse an import the app cannot value (self-directed run #17)
+- **Assessment:** Environment behaved as the standing note predicts: `node_modules` under `~/Documents` was
+  `compressed,dataless` again, so I cloned fresh to the non-iCloud scratchpad and `npm ci`'d there — baseline
+  **344 tests in 2.74s + build green** (JS 326.05 kB / CSS 59.39 kB), real `npm run refresh` = **41/41 priced +
+  fundamentals**. `fileproviderd` was idle (0.0% CPU), so no run #15 wedge; the eviction alone justifies cloning off
+  iCloud. Run #15's preview-binding fix worked first try again (added `psd-run17`, port 5202, to the cross-project
+  `.claude/launch.json`; vite bound to MY tree, no `lsof` forensics). Drove all five surfaces live (NAV kr109,273 /
+  +9.37% total / −1.13% today, data 28 Jul 02:08): Portfolio, Opportunities, Map (score×risk four zones), Compare,
+  Company (per-input MEASURED/EDITORIAL labels intact) — all still genuinely distinct, **don't consolidate**.
+  *Screenshots were unavailable this run* (the Browser pane wedged after the second capture), so every visual claim
+  below is a DOM/CSSOM measurement rather than an eyeball — which turned out to be the more precise instrument anyway.
+  I verified all four of run #16's carry-forwards against my own tree rather than trusting them, and **(3) turned out
+  to be far worse than it was recorded as.** Run #16 filed it as "import silence is reduced, not eliminated". It is
+  not silence — it is **fabrication**. Reproduced live: one `"n/a"` cell in an otherwise-healthy Danish sample export
+  (identity columns intact, so run #16's `holdings.length === 0` alert cannot fire) renders headline `.nav-value` =
+  the literal string **"NaN"**, source line **"Imported 28 Jul 2026 · saved in this browser · DKK NaN as imported"** —
+  a dated success receipt — provenance **"Live prices · 5/6 holdings (0% of book)"**, and, worst of all,
+  **"▲ 0.00% today" in the green `nav-delta up` treatment**. That last one is manufactured, not merely missing: the
+  today-% guard `model.totalMarketValueDkk - model.dayGainDkk > 0` (`App.tsx:434-437`) is false for NaN and falls back
+  to a **literal 0**, which renders green with an up-arrow. `formatSignedPct` already returns "—" for non-finite input
+  (`App.tsx:3724`) — so the upstream arithmetic guard actively *defeats* an existing honesty guard by substituting a
+  number. Meanwhile the rest of the screen stays fully authoritative (6 verdict rows, scores 81/74/68, +12.42% total,
+  weights 24.3%/21.5%), all computed from other columns that parsed fine. That is the worst failure shape for a
+  pre-decision instrument: the analysis looks intact, so the owner discounts the NAV as a display glitch and acts on
+  the sized verdicts.
+- **Move:** **fix (trust, value #1).** Ran the anti-anchoring panel as an ultracode workflow: 5 lenses (trust /
+  coherence-cold-read / decisiveness+bigger-defect-hunt / craft-a11y / a dedicated ship-nothing advocate) + an
+  independent synthesizer. Verdict **A ×4, E ×1**; synthesizer **A at high confidence**, discarding the E vote in full
+  (it resolved no tree, read no file, and all six of its premise-checks were UNVERIFIED — the run #7/#15 wrong-tree
+  hazard in its purest form; it conceded in writing that it was "using E to carry an operational failure"). The panel
+  **corrected my framing on the record**, which is the point of running it: I had reached for A on the strength of a
+  renamed/English-language column — a laboratory shape — and three lenses named "frequency-weighted, B and C win" as
+  their own strongest objection. The synthesizer killed that objection with the repo's own evidence: `parseDanishNumber`
+  returns NaN for *any* unreadable cell, and `portfolio.test.ts:47-59` is a fixture the author wrote for exactly this
+  (`"n/a"` in a Danish export). **One bad cell in a real export is enough** — I then reproduced precisely that live
+  before building. Shipped: a second gate in `handleFileUpload` rejecting any parse where **some** holding has a
+  non-finite `marketValueDkk`, routed through run #16's existing `rejected`/`.source-error` surface with a `reason`
+  discriminant. Invoked `/frontend-design` for the one real design question — does "found positions but cannot value
+  them" earn different weight from "found no positions"? — and it resolved on principle: **same surface, same
+  treatment, different words.** Both failures leave the reader in the identical position (nothing imported, book
+  unchanged, fix the file and re-pick), so a second visual register would encode a severity difference they cannot act
+  on differently; the difference is real and belongs in the copy, which is the material that genuinely varies. Zero new
+  CSS — the built stylesheet is **byte-identical** (same content hash), which is the structural proof of "no new visual
+  vocabulary" rather than a claim. Copy names the number the file must CARRY, not a cause (run #16's rule): a blank
+  cell, an `"n/a"`, a renamed column and an English export all reach this branch. Rejected: **B** (`.next-moves-foot`,
+  craft #5 — verified real and worse than logged, see carry-forwards); **C** (`.upload` focus ring, craft #5, now a
+  *fourth* deferral — run #16 pre-registered it as this run's default "if nothing bigger appears", and something
+  bigger appeared, so the condition is unmet rather than overridden); **D** (`changes.ts`, invisible without a
+  re-import); **E**; and the forbidden list (Concentration label, `skippedRows`, hero sparkline, monolith refactor).
+- **Result:** independent skeptical reviewer (separate from the implementer, anchored to this branch's exact HEAD
+  `35fab85`) verdict **SHIP WITH NITS** — strictly better, no regression. It ran **10 mutations of its own** (all
+  caught, including `some`→`every`, the `reason` discriminant, and landing PR #58's `?? 0` on top — which fails 2 tests
+  loudly rather than silently re-opening the understated NAV), verified 347 tests + green build itself, and measured
+  the bundle (+0.38 kB JS, CSS byte-identical). It contributed one fact I had missed and that materially strengthens
+  the change: **the live-pricing path does not rescue a NaN either** — `importFxFactor` (`valuation.ts:50-54`) returns
+  undefined for a non-finite market value, so `isHoldingLive` is permanently false and `valuation.ts:151` re-adds the
+  NaN, meaning the NAV is NaN **even at 100% live coverage**. Therefore the set of files newly refused is *exactly* the
+  set that previously rendered a NaN NAV: **no file that imported correctly before is refused now**, which is the
+  cleanest possible answer to the false-positive worry. It also probed the parser with real malformed shapes — a legit
+  `"0,00"` market value and a grouped Danish `"16.339,20"` both still import; a semicolon re-save still lands on the
+  *no-positions* branch; the broker's `"Aktier (6)"` group row is filtered by `hasPositionIdentity` before the check —
+  and confirmed localStorage cannot carry a NaN back (`JSON.stringify(NaN)` → `null`, rejected by `storage.ts:26`).
+  Its one substantive nit asked me to delete or re-comment the dead guard in `src/lib/portfolio.ts`; I **declined this
+  run** and carried it forward, because the panel bound this move away from that file while PR #58 is open against it,
+  and the nit is a pre-existing condition rather than a regression this branch introduces. I addressed it at the call
+  site instead — a comment at the gate naming the dead field, so a reader at the decision point isn't misled by a
+  policy comment that no longer governs anything. **347 tests + build green** (JS 326.43 kB, +0.38; CSS 59.39 kB,
+  byte-identical). Live acceptance demonstrated, not asserted, all six cases against the running app: one `n/a` cell →
+  alert names the file, NAV/deltas/source line unchanged, **zero "NaN" anywhere on the page**; same filename re-picked
+  → "**Still** couldn't value…"; renamed/English column → same refusal; a no-positions file → the **original** message,
+  unregressed; the healthy real export → imports, alert withdrawn, source line flips to "Imported 28 Jul 2026"; Reset →
+  withdrawn. Styling measured identical to run #16's surface (12px/600, `--down` `rgb(179,50,42)`, flush under the
+  source line at 860.5); at 375px no horizontal overflow (`scrollWidth === clientWidth === 375`), aligned with the
+  source line, a long filename wrapping via the inherited `overflow-wrap: anywhere`; console clean. Shipped —
+  **PR #_pending — appended on merge._**
+  *Carry-forward for run #18, in priority order:*
+  (1) **Reconcile the dead guard — but only AFTER PR #58 lands or is closed.** Either delete `PortfolioParseResult`'s
+  unused `totalMarketValueDkk` (Charter #3: remove before adding) or rewrite its comment to point at the real gate;
+  update `portfolio.test.ts:47-59`, whose name currently describes a property the product deliberately does not have.
+  Do NOT do this while #58 is open against the same file.
+  (2) **`.next-moves-foot` — verified real, and the fix goes on the CSS side, not the JSX.** `App.tsx:2654` renders
+  `className="next-moves-foot"` (plural); the only rule is `.next-move-foot` (singular, `styles.css:2237`). I measured
+  it live: the method caveat renders at **16px in near-full ink `rgb(22,24,29)`**, no background, no border, 39px tall —
+  within its own card it **ties for the largest text** (level with the score numbers) and is **larger than every company
+  name** (14.5px); the sibling `.reach-foot` correctly renders 11px/`rgb(154,160,168)`. All five other `-foot`
+  classNames have matching selectors. **Rename the SELECTOR to `.next-moves-foot` and move it beside `.next-moves-list`
+  — do not rename the JSX to singular:** `styles.css` splits into a section family `.next-moves-*` (:2106-:2133) and a
+  row family `.next-move-*` (:2141-:2233), and `:2237` is a *section* rule misfiled at the tail of the row family.
+  Pin it with a test asserting every `-foot` className in `App.tsx` has a matching selector.
+  (3) **`.upload` focus ring, with two corrections to what run #16 wrote.** (a) `.upload:focus-visible` **already
+  exists** in the shared 19-selector list at `styles.css:4072` and is dead — so this is "make an existing declaration
+  true", not "add a rule". (b) Run #16's note "no CSS sets `outline: none` — don't hunt for one" is **FALSE**: three do
+  (`styles.css:2470`, `:2579`, `:4095`). Neither touches `.upload`, so the intent held, but the statement was wrong.
+  The `:has()` fix must still live in its OWN rule (appending to the shared list would invalidate it on engines lacking
+  `:has()` and silently delete every focus ring in the app); `:focus-within` is still not acceptable; draw on the label.
+  (4) **`src/lib/changes.ts`** — `prev.owned` written and never read; `ACTION_RANK` ties hold/watch and
+  increase/investigate, so a ladder-crossing tie renders a green up-arrow for a change with no direction.
+  (5) **The guard lives at the call site, not the parse boundary** (reviewer's nit 3). Airtight today —
+  `handleFileUpload` is the only path that sets holdings from a parse — but a future second import path (drag-drop, a
+  URL fetch) would bypass it. Recorded so a later run doesn't reintroduce the hole unknowingly.
+  *Governance, still unresolved and still the owner's call:* the "RETIRED" `stock---do-maintenance-improve-structure`
+  task is still `enabled: true`. **Seven** of its PRs are open — #49, #53, #54, #55, #56, #58, #60 — unchanged from
+  run #16. One of them (#58) now proposes the **opposite** fix to this run's, coercing an unreadable MEASURED cell to
+  `0`; its own PR body concedes that is "the thing the Charter's §1 forbids" and justified it only because the
+  alternative was a demo book silently replacing real positions — an alternative this branch removes entirely, since
+  nothing is saved. It cannot land silently (2 tests go red), but it needs an owner decision. Reported, not acted on.
 
 ### 2026-07-27 — the import stops failing in silence (self-directed run #16)
 - **Assessment:** Environment behaved exactly as the standing note predicts and cost only minutes this time:
