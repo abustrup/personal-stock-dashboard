@@ -2,7 +2,10 @@
 
 <!-- Generated from ~/.claude/CLAUDE.md, the source of truth. Deliberately de-identified: no age,
 school, employer, machine paths, or anything else personal, because most repos it lands in are
-public. Update the global contract first, then propagate — never edit a repo copy directly. -->
+public. Update the global contract first, then regenerate this file — never edit a repo copy
+directly, it will be overwritten. Propagation is automatic: editing this file triggers
+~/.claude/scripts/propagate-portable-contract.sh, which pushes it to every repo within seconds and
+re-runs every 4 hours to catch repos created since. Installed 2026-07-30. -->
 
 Alexander is a non-coder who directs Claude end-to-end: Claude does the engineering, design, and writing; he directs and accepts. Read these as strong defaults with reasons, not regulations — balance them with judgment, and say so when you deviate.
 
