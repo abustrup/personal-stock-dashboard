@@ -2,6 +2,11 @@
 
 This project is intentionally simple at the UI layer and more analytical in the TypeScript modules.
 
+How to work with the owner — reporting format, honesty discipline, how much to
+decide alone — lives in @docs/working-with-alexander.md. Read it first; this file
+and `AGENTS.md` cover the project, that one covers the person. It matters most in
+cloud and web sessions, which see only what this repository contains.
+
 ## Commands
 
 - `npm test`
