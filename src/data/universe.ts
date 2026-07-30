@@ -380,4 +380,210 @@ export const universe: Company[] = [
       "Sell-side constructive on the AGI thesis (e.g. JPMorgan Overweight) offset by valuation and China-AI export risk.",
     ),
   },
+
+  // ————————————————————————————————————————————————————————————————
+  // China sleeve — the ten Chinese names most relevant to THIS book, chosen to
+  // mirror the exposures it already owns rather than to cover the index:
+  //   AI compute        NVDA / SOXX  → Biren, SMIC, Horizon Robotics
+  //   AI platform/cloud MSFT / GOOGL → Alibaba, Tencent, Baidu
+  //   Consumer devices  AAPL         → Xiaomi
+  //   Autonomy / EV     TSLA         → BYD
+  //   Model layer       (no US peer) → Knowledge Atlas (Zhipu), MiniMax
+  // Alibaba, Tencent and Knowledge Atlas are listed above; the seven below
+  // complete the set. Every name is a Hong Kong primary line — mainland A-share
+  // AI names (Cambricon, Moore Threads, Unitree) are deliberately excluded
+  // because Saxo can't trade the Shanghai/Shenzhen boards, and an idea you can't
+  // buy is noise. Runners-up considered and left out: Kuaishou (Kling video),
+  // Lenovo (AI servers), Hua Hong (mature-node foundry), Meituan, NetEase.
+  //
+  // All axes below are EDITORIAL estimates, set as reasoned judgements from
+  // public reporting — never measured data. `momentum` is a seed placeholder
+  // anchored on where each share sits in its 52-week range with a neutral trend
+  // assumption; the refresh replaces it (and growth/quality/valuation/balance
+  // sheet, once fundamentals land) with measured values. Geopolitical risk runs
+  // high across the whole sleeve by construction: US export controls, Entity
+  // List exposure and mainland policy are the shared, non-diversifiable risk.
+  // ————————————————————————————————————————————————————————————————
+  {
+    // Mainland China's largest foundry and the bottleneck in its domestic AI
+    // supply chain. Being on the US Entity List is both the cap on its tooling
+    // and the reason domestic chip designers have no choice but to buy from it.
+    name: "Semiconductor Manufacturing International",
+    symbol: "0981.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "semiconductor-foundry", "ai-supply-chain"],
+    aiExposure: 78,
+    growth: 62,
+    momentum: 40,
+    quality: 60,
+    valuationRisk: 70,
+    balanceSheetRisk: 35,
+    geopoliticalRisk: 88,
+    newsSignal: positiveNews(
+      "AI and localisation orders are lifting utilisation and wafer pricing; soft mature-node consumer demand and equipment access are the offsets.",
+      62,
+    ),
+    expertSignal: expert(
+      "positive",
+      "Consensus proxy is constructive on domestic-substitution volume, cautious on the premium the policy story carries.",
+    ),
+  },
+  {
+    // The first GPU designer to list in Hong Kong (Jan 2026) and the closest
+    // domestic analogue to the book's NVIDIA position. Revenue is growing fast
+    // off a very small base, and R&D still runs ahead of it.
+    name: "Shanghai Biren Technology",
+    symbol: "6082.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "ai-infrastructure", "semiconductors"],
+    aiExposure: 96,
+    growth: 88,
+    momentum: 30,
+    quality: 28,
+    valuationRisk: 90,
+    balanceSheetRisk: 55,
+    geopoliticalRisk: 85,
+    newsSignal: neutralNews(
+      "GPGPU domestic-substitution demand is the whole thesis; the company is pre-profit, holds low single-digit share, and spends more on R&D than it earns.",
+      50,
+    ),
+    expertSignal: expert(
+      "neutral",
+      "Expert proxy splits between the substitution runway and a multiple that already prices years of execution.",
+    ),
+  },
+  {
+    // Search and ads pay for an AI franchise the market largely ignores: ERNIE,
+    // AI cloud, the Apollo Go robotaxi fleet, and the Kunlunxin chip unit now
+    // being carved out. The cheapest way in this sleeve to own that stack.
+    name: "Baidu",
+    symbol: "9888.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "ai-platform", "autonomy"],
+    aiExposure: 82,
+    growth: 45,
+    momentum: 34,
+    quality: 62,
+    valuationRisk: 28,
+    balanceSheetRisk: 20,
+    geopoliticalRisk: 78,
+    newsSignal: neutralNews(
+      "AI cloud, ERNIE and a scaling robotaxi fleet are growing into a declining search-ad core; the Kunlunxin chip carve-out is the visible catalyst.",
+      56,
+    ),
+    expertSignal: expert(
+      "positive",
+      "Expert proxy sees a large net-cash balance sheet and sum-of-parts support, with monetisation timing as the open question.",
+    ),
+  },
+  {
+    // The AAPL analogue with an EV business attached: in-house XRING silicon, its
+    // own OS and models, and a phone/IoT distribution base to push them through.
+    name: "Xiaomi Corporation",
+    symbol: "1810.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "consumer-ai", "devices", "autonomy"],
+    aiExposure: 62,
+    growth: 68,
+    momentum: 32,
+    quality: 68,
+    valuationRisk: 52,
+    balanceSheetRisk: 25,
+    geopoliticalRisk: 62,
+    newsSignal: positiveNews(
+      "Self-developed silicon plus an EV line scaling past 30k units a month is the upside; EV growth is moderating and the shares have de-rated hard.",
+      58,
+    ),
+    expertSignal: expert(
+      "positive",
+      "Expert proxy likes the hardware-to-EV attach rate, and flags how much of it the previous multiple already assumed.",
+    ),
+  },
+  {
+    // The Tesla counterweight: vertically integrated EV/battery volume with the
+    // God's Eye ADAS stack now shipped across the range. Domestic price war
+    // versus a fast-growing export book is the whole argument.
+    name: "BYD Company",
+    symbol: "1211.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "autonomy", "energy"],
+    aiExposure: 45,
+    growth: 42,
+    momentum: 42,
+    quality: 66,
+    valuationRisk: 32,
+    balanceSheetRisk: 38,
+    geopoliticalRisk: 72,
+    newsSignal: neutralNews(
+      "Record overseas volume is offsetting a shrinking, discount-driven home market; margins and profit have compressed while ADAS goes standard-fit.",
+      54,
+    ),
+    expertSignal: expert(
+      "neutral",
+      "Expert proxy weighs an undemanding multiple and export momentum against a domestic price war with no clear end.",
+    ),
+  },
+  {
+    // Edge-AI silicon for cars: Journey 6 and the HSD urban-driving stack. High
+    // AI purity, but automakers building ADAS in-house is the standing threat.
+    name: "Horizon Robotics",
+    symbol: "9660.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "autonomy", "ai-supply-chain"],
+    aiExposure: 88,
+    growth: 70,
+    momentum: 26,
+    quality: 30,
+    valuationRisk: 72,
+    balanceSheetRisk: 45,
+    geopoliticalRisk: 70,
+    newsSignal: neutralNews(
+      "Design wins and HSD ramp keep revenue growing at a healthy clip; losses stay wide, hardware mix dilutes margin, and OEM in-housing caps the ceiling.",
+      52,
+    ),
+    expertSignal: expert(
+      "neutral",
+      "Expert proxy rates the share position in mass-market ADAS highly, and the path to profit not at all clearly.",
+    ),
+  },
+  {
+    // Multimodal foundation models (Hailuo video, Talkie, MiniMax Agent) and the
+    // largest AI-model IPO to date (HKEX, Jan 2026). The book's second pure model
+    // bet next to Knowledge Atlas — consumer/multimodal where that one is
+    // enterprise. Priced for a decade of compounding and down heavily from its
+    // post-listing high; treat as the sleeve's most speculative slot.
+    name: "MiniMax Group",
+    symbol: "0100.HK",
+    region: "China",
+    exchange: "Hong Kong",
+    assetType: "stock",
+    themes: ["china-ai", "ai-platform", "consumer-ai"],
+    aiExposure: 97,
+    growth: 90,
+    momentum: 21,
+    quality: 22,
+    valuationRisk: 92,
+    balanceSheetRisk: 58,
+    geopoliticalRisk: 84,
+    newsSignal: neutralNews(
+      "Triple-digit revenue growth across text, video and voice against losses many times revenue, thin gross margin, and a share price far below its debut.",
+      48,
+    ),
+    expertSignal: expert(
+      "neutral",
+      "Expert proxy holds high price targets on the model thesis while the market prices in dilution and compute-access risk.",
+    ),
+  },
 ];

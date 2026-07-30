@@ -270,8 +270,8 @@ describe("App", () => {
     expect(within(panel).getAllByText(/gap · you own none/i).length).toBeGreaterThan(0);
 
     // No silent slicing: every non-owned name in the demo universe is shown as a
-    // row (14 = 20 curated names − 6 demo holdings), not capped at ten.
-    expect(ledgerRows(panel)).toHaveLength(14);
+    // row (21 = 27 curated names − 6 demo holdings), not capped at ten.
+    expect(ledgerRows(panel)).toHaveLength(21);
 
     // Opening a name from a theme group routes to its detail view.
     fireEvent.click(ledgerRows(panel)[0]);
@@ -290,7 +290,7 @@ describe("App", () => {
     expect(within(panel).getAllByText(/off saxo/i).length).toBeGreaterThan(0);
     // Even off-limits, every non-owned name is still shown (honest, not silently dropped).
     const rows = ledgerRows(panel);
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(21);
     // Off-limits rows are visually demoted via a class, not removed from the DOM.
     expect(rows.some((row) => row.classList.contains("off-limits"))).toBe(true);
 
