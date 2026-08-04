@@ -163,6 +163,35 @@ describe("diffModel", () => {
     expect(digest.changes[1].symbol).toBe("BBB");
   });
 
+  it("keeps the verdict even when a same-name price move is feed-glitch huge", () => {
+    // A reverse-split / unadjusted print can read as a several-hundred-percent
+    // move. The verdict must still win: its ranking weight floor (1000) has to
+    // beat the capped price weight (≤900), not just beat realistic moves.
+    const base = snapshotModel([rec({ symbol: "AAA", action: "hold", momentum: 50, price: 4 })], "T1");
+    const digest = diffModel(base, [rec({ symbol: "AAA", action: "trim", momentum: 50, price: 100 })]); // +2400%
+    expect(digest.changes).toHaveLength(1);
+    expect(digest.changes[0].kind).toBe("verdict");
+  });
+
+  it("ranks a verdict flip above another name's feed-glitch price move", () => {
+    const base = snapshotModel(
+      [
+        rec({ symbol: "AAA", action: "hold", momentum: 50 }),
+        rec({ symbol: "BBB", momentum: 50, price: 4 }),
+      ],
+      "T1",
+    );
+    const digest = diffModel(base, [
+      rec({ symbol: "AAA", action: "trim", momentum: 50 }),
+      rec({ symbol: "BBB", momentum: 50, price: 100 }), // +2400%, an unadjusted-split print
+    ]);
+    expect(digest.changes[0].symbol).toBe("AAA");
+    expect(digest.changes[0].kind).toBe("verdict");
+    // The huge price move is still reported (its true pct is preserved), just ranked below the verdict.
+    expect(digest.changes[1].symbol).toBe("BBB");
+    expect(digest.changes[1].pricePct).toBeCloseTo(2400, 0);
+  });
+
   it("skips names that have no prior entry to diff against", () => {
     const base = snapshotModel([rec({ symbol: "AAA", momentum: 50 })], "T1");
     const digest = diffModel(base, [rec({ symbol: "ZZZ", action: "trim", momentum: 90 })]);
