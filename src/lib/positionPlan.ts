@@ -1,3 +1,4 @@
+import { formatWholeNumber } from "./format";
 import type { Investability } from "./investability";
 
 /**
@@ -77,8 +78,6 @@ export function planPosition(inv: Investability, bookValueDkk: number): Position
   };
 }
 
-const DKK = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-
 /** Round a 0–1 fraction to a percent, never showing a non-zero share as a bare "0%". */
 export function bookPctLabel(fraction: number | undefined): string | undefined {
   if (fraction === undefined) return undefined;
@@ -90,10 +89,10 @@ export function bookPctLabel(fraction: number | undefined): string | undefined {
 /** A short, prominent figure for the buy plan — "≈ 4 shares · DKK 4,800". */
 export function planHeadline(plan: PositionPlan): string {
   if (plan.status === "over") {
-    return `1 share ≈ DKK ${DKK.format(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}`;
+    return `1 share ≈ DKK ${formatWholeNumber(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}`;
   }
   const unit = plan.shares === 1 ? "share" : "shares";
-  return `≈ ${DKK.format(plan.shares)} ${unit} · DKK ${DKK.format(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}`;
+  return `≈ ${formatWholeNumber(plan.shares)} ${unit} · DKK ${formatWholeNumber(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}`;
 }
 
 /** One plain-language line for the front-page card, detail view and tooltips. */
@@ -102,12 +101,12 @@ export function describePlan(plan: PositionPlan): string {
   if (plan.status === "over") {
     const multiple = plan.slotMultiple >= 10 ? "over 10" : plan.slotMultiple.toFixed(1);
     const tail = ofBook ? ` — about ${ofBook} of your book` : "";
-    return `One share ≈ DKK ${DKK.format(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}, ${multiple}× your DKK ${DKK.format(plan.budgetDkk)} slot${tail}. The smallest position already overshoots your sizing.`;
+    return `One share ≈ DKK ${formatWholeNumber(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}, ${multiple}× your DKK ${formatWholeNumber(plan.budgetDkk)} slot${tail}. The smallest position already overshoots your sizing.`;
   }
   const unit = plan.shares === 1 ? "share" : "shares";
   const leftover = plan.budgetDkk - plan.costDkk;
   const remainder =
-    leftover >= 1 ? ` leaving DKK ${DKK.format(leftover)} of the slot unused` : " using the slot almost exactly";
+    leftover >= 1 ? ` leaving DKK ${formatWholeNumber(leftover)} of the slot unused` : " using the slot almost exactly";
   const tail = ofBook ? `, about ${ofBook} of your current book` : "";
-  return `≈ ${DKK.format(plan.shares)} ${unit} for DKK ${DKK.format(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}${tail} —${remainder}.`;
+  return `≈ ${formatWholeNumber(plan.shares)} ${unit} for DKK ${formatWholeNumber(plan.costDkk)}${plan.fxApprox ? " (approx)" : ""}${tail} —${remainder}.`;
 }

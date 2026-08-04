@@ -52,6 +52,16 @@ export function importFxFactor(holding: { marketValueDkk: number; currentPrice: 
 }
 
 /**
+ * The DKK cost basis for a holding: the broker's own costBasisDkk when present,
+ * else reconstructed from the imported value minus its all-time gain. Defined once
+ * so the per-row ledger TOTAL (liveHoldingReturnPct) and the headline NAV
+ * (valuePortfolio) can never diverge on how a basis is derived.
+ */
+function costBasisOf(holding: { marketValueDkk: number; costBasisDkk?: number; totalGainDkk?: number }): number {
+  return holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+}
+
+/**
  * Is this holding re-priced from a live snapshot? The single predicate the headline
  * NAV and any per-row "live" treatment must share: a usable snapshot price in the
  * holding's own currency, with an import-implied FX factor to convert it. Exported so
@@ -94,7 +104,7 @@ export function liveHoldingReturnPct(
   if (!isHoldingLive(holding, market) || market === undefined) return undefined;
   const factor = importFxFactor(holding);
   if (factor === undefined) return undefined;
-  const basis = holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+  const basis = costBasisOf(holding);
   if (!(basis > 0)) return undefined;
   const value = market.price * factor;
   return ((value - basis) / basis) * 100;
@@ -120,7 +130,7 @@ export function valuePortfolio(portfolio: Recommendation[]): LiveValuation {
     if (!holding) continue;
     total += 1;
     importedValueDkk += holding.marketValueDkk;
-    const basis = holding.costBasisDkk ?? holding.marketValueDkk - (holding.totalGainDkk ?? 0);
+    const basis = costBasisOf(holding);
     costBasisDkk += basis;
 
     const market = rec.company.market;

@@ -1,3 +1,4 @@
+import { isFiniteNumber } from "./number";
 import type { Recommendation, RecommendationAction } from "./types";
 
 // What moved since the LAST data refresh you saw. Every other view in the
@@ -87,10 +88,6 @@ const ACTION_RANK: Record<RecommendationAction, number> = {
   trim: -1,
   avoid: -2,
 };
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
 
 function measuredMomentum(rec: Recommendation): number | undefined {
   const value = rec.company.market?.momentum;
